@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pqcheck"
+version = "0.1.0b1"
+description = "PQC implementation assurance via metamorphic relations and specification invariants"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+pqcheck = "pqcheck.cli:main"
+
+[tool.setuptools]
+packages = ["pqcheck", "pqcheck.adapters", "pqcheck.backtest", "pqcheck.relations", "pqcheck.testing"]
+
+[tool.setuptools.package-data]
+"pqcheck.adapters" = ["*.c", "*.h", "*.sh", "*.mjs", "rust/*"]

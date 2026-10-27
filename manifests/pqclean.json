@@ -1,0 +1,8 @@
+{
+  "target": "PQClean ML-KEM (clean)",
+  "version": "0586a82",
+  "adapter": "c",
+  "harness": "../pqcheck/adapters/harness_pqclean",
+  "wsl": false,
+  "algorithms": ["kem:ML-KEM-512", "kem:ML-KEM-768", "kem:ML-KEM-1024"]
+}

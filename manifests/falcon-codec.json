@@ -1,0 +1,7 @@
+{
+  "target": "PQClean falcon codec (as vendored in liboqs)",
+  "version": "0.16.0",
+  "adapter": "codec",
+  "harness": "../pqcheck/adapters/codec_falcon512",
+  "wsl": false
+}

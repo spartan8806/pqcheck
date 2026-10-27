@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.14"]
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify zero third-party imports
+        shell: python
+        run: |
+          import ast, pathlib, sys
+          bad = []
+          for path in pathlib.Path("pqcheck").rglob("*.py"):
+              tree = ast.parse(path.read_text(encoding="utf-8"))
+              for node in ast.walk(tree):
+                  names = []
+                  if isinstance(node, ast.Import):
+                      names = [a.name.split(".")[0] for a in node.names]
+                  elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                      names = [node.module.split(".")[0]]
+                  for name in names:
+                      if name != "pqcheck" and name not in sys.stdlib_module_names:
+                          bad.append(f"{path}: {name}")
+          print("\n".join(bad) if bad else "zero third-party imports: ok")
+          raise SystemExit(1 if bad else 0)
+      - name: Compile the whole tree
+        run: python -m compileall -q pqcheck probes
+      - name: Acceptance selftest
+        run: python pqcheck/selftest.py
+      - name: Verdict engine self-check
+        run: python pqcheck/verdict.py
+      - name: Backtest accounting
+        run: python -m pqcheck.backtest.report
+      - name: Standing probes
+        run: python -m pqcheck.probes
+      - name: List relations and adapters
+        run: |
+          python -m pqcheck relations
+          python -m pqcheck adapters
+      - name: Shipped manifest can never report clean unbuilt
+        shell: bash
+        run: |
+          set +e
+          python -m pqcheck run manifests/c-library.json
+          code=$?
+          set -e
+          echo "exit code: $code"
+          test "$code" -eq 2
