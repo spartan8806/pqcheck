@@ -136,7 +136,17 @@ class CTarget(ProcessTarget):
             ct, ss = int(meta["ct"]), int(meta["ss"])
             self.sizes = {"pk": pk, "sk": sk, "ek": pk, "dk": sk, "ct": ct, "ss": ss}
             self.measured_sizes = ["ek", "dk", "ct", "ss"]
-            self.caps = frozenset({Capability.KEM, Capability.GUARD_FILL, Capability.EXPLICIT_SIG_LENGTH})
+            # EXPLICIT_SIG_LENGTH is declared only when the harness's
+            # info line asserts the underlying library API receives an
+            # explicit ciphertext length (ctlen=explicit). Pointer-only
+            # C KEM APIs (PQClean/OQS crypto_kem_dec style) take no
+            # length argument, so off-length ciphertext probes cannot
+            # be observed by the library and the length-exact relation
+            # must decline (NOT_ANSWERABLE), never accuse it.
+            caps = {Capability.KEM, Capability.GUARD_FILL}
+            if meta.get("ctlen") == "explicit":
+                caps.add(Capability.EXPLICIT_SIG_LENGTH)
+            self.caps = frozenset(caps)
             self.fixed_sig_len = None
             self.sig_len_basis = ""
         else:
@@ -147,6 +157,14 @@ class CTarget(ProcessTarget):
             self.fixed_sig_len, self.sig_len_basis = self._infer_fixed_sig_len(sig)
         self.name = f"CTarget({algorithm})"
         self.size_semantics = "exact"
+        # Build provenance reported by the harness itself (rev= token
+        # in the info line), or None when the harness reports none.
+        self.reported_revision = meta.get("rev")
+        # The line protocol has no prehash verb: this adapter cannot
+        # express a prehash mode, so mode-separation relations must
+        # decline (NOT_ANSWERABLE) instead of testing direct signing
+        # twice and accusing the library.
+        self.supports_prehash = False
 
     def _infer_fixed_sig_len(self, declared):
         lengths = []
@@ -206,9 +224,13 @@ class CTarget(ProcessTarget):
     def sign(self, sk, msg, ctx=b"", prehash=False, **kw):
         if ctx:
             return Outcome(Status.REJECTED, detail="C harness protocol cannot express a context string")
+        if prehash:
+            return Outcome(Status.REJECTED, detail="C harness protocol cannot express a prehash mode")
         return self._call("sign " + _hex(sk) + " " + _hex(msg))
 
     def verify(self, pk, msg, sig, ctx=b"", prehash=False, **kw):
         if ctx:
             return Outcome(Status.REJECTED, detail="C harness protocol cannot express a context string")
+        if prehash:
+            return Outcome(Status.REJECTED, detail="C harness protocol cannot express a prehash mode")
         return self._call("verify " + _hex(pk) + " " + _hex(msg) + " " + _hex(sig))

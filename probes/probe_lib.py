@@ -5,7 +5,16 @@ import random
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+_HERE = Path(__file__).resolve()
+if (_HERE.parents[1] / "pqcheck").is_dir():
+    ROOT = _HERE.parents[1]  # source checkout: <root>/probes/probe_lib.py
+elif _HERE.parents[2].name == "pqcheck":
+    ROOT = _HERE.parents[3]  # installed wheel: <site>/pqcheck/assets/probes/
+else:
+    ROOT = _HERE.parents[1]
+MANIFESTS_DIR = ROOT / "manifests"
+if not MANIFESTS_DIR.is_dir():
+    MANIFESTS_DIR = ROOT / "pqcheck" / "assets" / "manifests"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

@@ -41,8 +41,23 @@ def _classify(code: int, output: str) -> str:
     return "FAIL"
 
 
+def _default_probes_dir() -> Path:
+    checkout = Path(__file__).resolve().parents[1] / "probes"
+    if checkout.is_dir():
+        return checkout
+    # Installed wheel: probes ship as bundled package assets.
+    try:
+        from importlib import resources
+        bundled = Path(str(resources.files("pqcheck") / "assets" / "probes"))
+        if bundled.is_dir():
+            return bundled
+    except Exception:
+        pass
+    return checkout
+
+
 def run_probes(directory=None, timeout=300):
-    root = Path(directory) if directory else Path(__file__).resolve().parents[1] / "probes"
+    root = Path(directory) if directory else _default_probes_dir()
     results = []
     scripts = sorted(root.glob("verify_*.py")) if root.is_dir() else []
     for script in scripts:
@@ -90,7 +105,10 @@ def main(argv=None) -> int:
     for name, status, detail in results:
         print(f"{status:8} {name} {detail}")
     if not results:
-        print("no probes found")
+        print("no probes found: this pqcheck has neither a source-checkout "
+              "probes/ directory nor bundled pqcheck/assets/probes "
+              "(probes are a source-checkout and bundled-asset capability; "
+              "see README 'Source checkout vs installed wheel')")
     return exit_code
 
 

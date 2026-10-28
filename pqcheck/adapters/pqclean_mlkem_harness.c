@@ -7,9 +7,10 @@
  * are exact-sized malloc plus optional guard fill. The harness never
  * validates an input on behalf of the library.
  *
- * Build with the three clean/ trees on the include/link path, e.g.:
+ * Build with the three clean trees on the include/link path, e.g.:
  *   gcc -O1 -I pqclean/crypto_kem/ml-kem-768/clean pqclean_mlkem_harness.c \
- *       pqclean/crypto_kem/ml-kem-*/clean/*.c
+ *       <each pqclean ml-kem clean source file>
+ * (Writing the glob in this comment would end it early; keep it prose.)
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -44,6 +45,20 @@ int PQCLEAN_MLKEM1024_CLEAN_crypto_kem_dec(uint8_t *ss, const uint8_t *ct, const
 typedef int (*kem_fn)(uint8_t *, uint8_t *, const uint8_t *);
 typedef int (*keypair_fn)(uint8_t *, uint8_t *);
 
+/* Per-algorithm wrappers: assigning the PQClean functions directly to
+ * one shared pointer type trips incompatible-pointer-type warnings
+ * because enc/dec parameter order differs; wrappers keep types exact. */
+#define WRAP(ALG)                                                            \
+    static int wrap_##ALG##_keypair(uint8_t *pk, uint8_t *sk) {              \
+        return ALG##_crypto_kem_keypair(pk, sk); }                           \
+    static int wrap_##ALG##_enc(uint8_t *ct, uint8_t *ss, const uint8_t *pk) { \
+        return ALG##_crypto_kem_enc(ct, ss, pk); }                           \
+    static int wrap_##ALG##_dec(uint8_t *ss, uint8_t *ct, const uint8_t *sk) { \
+        return ALG##_crypto_kem_dec(ss, ct, sk); }
+WRAP(PQCLEAN_MLKEM512_CLEAN)
+WRAP(PQCLEAN_MLKEM768_CLEAN)
+WRAP(PQCLEAN_MLKEM1024_CLEAN)
+
 static const char *g_alg = NULL;
 static size_t PKB, SKB, CTB;
 static keypair_fn g_keypair;
@@ -61,7 +76,7 @@ static uint8_t *parse_hex(const char *s, size_t *out_len) {
     if (strcmp(s, "-") == 0) { *out_len = 0; return malloc(1); }
     size_t n = strlen(s);
     if (n % 2) return NULL;
-    uint8_t *buf = malloc(n / 2 + g_guard_n + 1);
+    uint8_t *buf = malloc(n / 2 + g_guard_n);
     if (!buf) return NULL;
     for (size_t i = 0; i < n / 2; i++) {
         int hi = hexval(s[2 * i]), lo = hexval(s[2 * i + 1]);
@@ -82,19 +97,19 @@ int main(int argc, char **argv) {
     g_alg = argv[2];
     if (strcmp(g_alg, "ML-KEM-512") == 0) {
         PKB = 800; SKB = 1632; CTB = 768;
-        g_keypair = PQCLEAN_MLKEM512_CLEAN_crypto_kem_keypair;
-        g_enc = PQCLEAN_MLKEM512_CLEAN_crypto_kem_enc;
-        g_dec = PQCLEAN_MLKEM512_CLEAN_crypto_kem_dec;
+        g_keypair = wrap_PQCLEAN_MLKEM512_CLEAN_keypair;
+        g_enc = wrap_PQCLEAN_MLKEM512_CLEAN_enc;
+        g_dec = wrap_PQCLEAN_MLKEM512_CLEAN_dec;
     } else if (strcmp(g_alg, "ML-KEM-768") == 0) {
         PKB = 1184; SKB = 2400; CTB = 1088;
-        g_keypair = PQCLEAN_MLKEM768_CLEAN_crypto_kem_keypair;
-        g_enc = PQCLEAN_MLKEM768_CLEAN_crypto_kem_enc;
-        g_dec = PQCLEAN_MLKEM768_CLEAN_crypto_kem_dec;
+        g_keypair = wrap_PQCLEAN_MLKEM768_CLEAN_keypair;
+        g_enc = wrap_PQCLEAN_MLKEM768_CLEAN_enc;
+        g_dec = wrap_PQCLEAN_MLKEM768_CLEAN_dec;
     } else if (strcmp(g_alg, "ML-KEM-1024") == 0) {
         PKB = 1568; SKB = 3168; CTB = 1568;
-        g_keypair = PQCLEAN_MLKEM1024_CLEAN_crypto_kem_keypair;
-        g_enc = PQCLEAN_MLKEM1024_CLEAN_crypto_kem_enc;
-        g_dec = PQCLEAN_MLKEM1024_CLEAN_crypto_kem_dec;
+        g_keypair = wrap_PQCLEAN_MLKEM1024_CLEAN_keypair;
+        g_enc = wrap_PQCLEAN_MLKEM1024_CLEAN_enc;
+        g_dec = wrap_PQCLEAN_MLKEM1024_CLEAN_dec;
     } else { fprintf(stderr, "unsupported algorithm %s\n", g_alg); return 64; }
 
     static char line[1 << 21];

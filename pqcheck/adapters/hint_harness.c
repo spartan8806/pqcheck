@@ -97,7 +97,7 @@ int main(void) {
             char *a = strtok_r(NULL, " \r\n", &save);
             if (!a) { printf("ERR decode_hints needs hex\n"); fflush(stdout); continue; }
             size_t in_len = strlen(a) / 2;
-            uint8_t *in = malloc(in_len + 1); int bad = 0;
+            uint8_t *in = malloc(in_len ? in_len : 1); int bad = 0;
             for (size_t i = 0; i < in_len; i++) {
                 int hi = hexval(a[2 * i]), lo = hexval(a[2 * i + 1]);
                 if (hi < 0 || lo < 0) bad = 1; else in[i] = (uint8_t)((hi << 4) | lo);

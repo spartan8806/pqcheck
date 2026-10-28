@@ -159,3 +159,83 @@ implementation differs from, or could not be verified against,
     suite were added; documentation paths and README numbers are
     locked by `probes/verify_paths_resolve.py` and
     `probes/verify_readme_claims.py`.
+
+19. **Phase 11 + independent-audit fix pass (2026-10-27).**
+    (a) Phase 11 added universal language adapters, an HTML report,
+    and a localhost-only (127.0.0.1) web workbench; zero third-party
+    dependencies retained. (b) Audit finding 1: the C/exec adapter
+    cannot express prehash mode, so CTarget now reports
+    supports_prehash=False and sig-mode-domain-separation declines
+    NOT_ANSWERABLE instead of accusing a direct-signing harness.
+    (c) Finding 2: the +1 allocation slack was removed from all C
+    harnesses (payload + guard exactly); the ASan boundary regression
+    skips explicitly on machines without a C compiler (this machine
+    has none, so the ASan run itself is unexecuted here).
+    (d) Finding 3: NobleTarget.oracle is None; a single-implementation
+    run is self-referential, never an independent oracle.
+    (e) Finding 4: reproduce shares run''s manifest/version validation.
+    (f) Finding 5: reproducer filenames are sanitized (kem:/sig:
+    colons become underscores; no NTFS alternate data streams).
+    (g) Finding 6: the Rust Falcon codec harness no longer imports
+    falcon-rust''s private encoding module; it implements the Falcon
+    compression format from spec with compress(coeffs, byte_length),
+    and the pinned-upstream facts are recorded in its Cargo.toml.
+    No cargo/rustc exists on this machine, so the Rust build itself
+    is unexecuted here. (h) Finding 7: probes and manifests ship as
+    bundled wheel assets (pqcheck/assets/...), kept byte-identical
+    to the checkout by a unit test; checkout-only probes now SKIP
+    explicitly (exit 77) under an installed wheel instead of failing.
+    (i) Finding 8: the PQClean harness comment no longer contains a
+    glob that closes the comment early, and per-algorithm WRAP()
+    wrappers keep function-pointer types exact.
+    Regression coverage: tests/test_audit_fixes.py (10 tests).
+    (j) Verification rerun after the fixes: full Noble 0.6.1 fixture
+    passed — 320 claims across ten algorithms, defects exactly the
+    two expected padded-Falcon sig-verify-length-exact findings
+    (falcon512padded, falcon1024padded), nothing else. Isolated
+    wheel install: pqcheck.probes exits 0 (checkout-only probes SKIP
+    explicitly). Windows reproducer for a colon-form algorithm name
+    is a normal discoverable .py file and replays. NOT executed on
+    this machine (no gcc/clang/cc, no cargo/rustc): ASan boundary
+    run, native C harness builds, Rust harness build, and the
+    external enc_rust vulnerable/fixed comparison (not in this
+    workspace) — these remain explicitly unexecuted, not passed.
+
+20. **Item 6 reopened and corrected (supersedes item 19(g)).**
+    The audit-fix replacement codec in adapters/rust/ was withdrawn:
+    it tested pqcheck''s own newly written code instead of the pinned
+    upstream target, and its bit layout did not match Falcon''s
+    (8 low bits, 1-run unary) versus the real format (7 low bits,
+    0-run unary terminated by 1). Restored: the harness now compiles
+    falcon-rust v0.3.0''s own encoding.rs, vendored byte-identical
+    (commit 8845fe573b2108a1a84eced6c438a4aeb6b3773c, SHA-256
+    f42364d13ccc0449815aab931966a7ffef6158120d55573332c11c228686dcc1,
+    enforced by test) because upstream marks the module pub(crate)
+    and no external crate can import it. codec_harness.rs is only
+    the protocol shell calling upstream compress(coeffs, 625) /
+    decompress(stream, 512); a no-op falcon-profiler shim supplies
+    upstream''s instrumentation attribute. Added cross-implementation
+    encoding vectors (pqcheck/testing/falcon_vectors.json): four real
+    Noble falcon512 signature encodings, eight hand-computed spec
+    vectors, five negative vectors; pqcheck''s independent spec codec
+    (pqcheck/testing/falcon_codec.py) reproduces Noble''s bytes
+    exactly on all four signatures. The Rust build itself remains
+    unexecuted on this machine (no cargo/rustc); probes and tests
+    skip that side explicitly (exit 77 / skipTest) until the binary
+    is built, and never claim it passed.
+
+21. **Completion pass: hash portability, enc_rust kit, native CI,
+    workbench reports.** (a) The vendored Falcon file was CRLF on
+    Windows; it is now LF-normalized, .gitattributes pins eol=lf,
+    and the canonical pin is the upstream Git blob
+    d8dee7cc5606d6fef1ff9c61e734d25b15136969 (SHA-256 of the LF file
+    a6eb5fd5e891c69627b76cd6ef249a54392730000624b5afa6aec78032eae02a);
+    verified in a fresh local clone (0 CRLF, both hashes match).
+    Supersedes the CRLF hash recorded in item 20. (b) enc_rust
+    regression shipped in regressions/enc_rust/ with manifests
+    pinning 121385c (vulnerable) and 572a37f (fixed); not executed
+    locally (no cargo) - the native CI job executes it. (c) Native
+    CI (tools/native_ci.sh) fails on missing tools or skipped
+    required checks by design. (d) Workbench gained a Generated
+    Reports tab labelling real manifest targets vs toy/reference
+    fixtures.

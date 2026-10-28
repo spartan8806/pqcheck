@@ -1,0 +1,7 @@
+{
+  "target": "pqcheck-reference-toys",
+  "version": "0.1.0b1",
+  "adapter": "python",
+  "module": "pqcheck.testing",
+  "algorithms": ["PackedEkKem", "ToySig", "ToyFalconSig", "ToyMldsaSig"]
+}

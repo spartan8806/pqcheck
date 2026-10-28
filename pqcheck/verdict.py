@@ -330,6 +330,10 @@ class Report:
             "not target risk"
         )
 
+    def to_html(self) -> str:
+        from pqcheck.html_report import report_to_html
+        return report_to_html(self)
+
     def _format_claim(self, marker: str, claim: Claim) -> list[str]:
         lines = [
             f"  {marker} [{claim.verdict.value}] {claim.subject}",

@@ -1,0 +1,19 @@
+[package]
+name = "enc-rust-harness"
+version = "0.1.0"
+edition = "2021"
+
+# enc_rust is NOT vendored. Clone it into ./vendor/enc_rust and check
+# out exactly one of the pinned revisions from README.md before
+# building; the harness forwards into whatever revision is there:
+#   vulnerable parent: 121385c2c9bab5ab509104b3e7b13259fc8a4080
+#   fix commit:        572a37f395e3c3bcf60d89bea89885b4dc13c176
+# The `decap_key` feature exposes the real 2400-byte ML-KEM-768
+# decapsulation key serialization this protocol needs.
+
+[dependencies]
+enc_rust = { path = "vendor/enc_rust", features = ["decap_key"] }
+
+[[bin]]
+name = "enc_rust_harness"
+path = "enc_rust_harness.rs"

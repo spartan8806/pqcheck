@@ -49,7 +49,13 @@ def open_target(manifest: Manifest, algorithm: str | None):
     from pqcheck.adapters.codec_bridge import CodecTarget
     from pqcheck.adapters.hint_bridge import HintTarget
     from pqcheck.adapters.noble import NobleTarget
+    from pqcheck.adapters.python_adapter import load_exec_target, load_python_target
 
+    if manifest.adapter == "python":
+        return load_python_target(manifest.module, algorithm, manifest.base)
+    if manifest.adapter == "exec":
+        kind, name = _split_algorithm(algorithm)
+        return load_exec_target(manifest.command, kind or _infer_kind(name or "", manifest), name)
     if manifest.adapter == "c":
         kind, name = _split_algorithm(algorithm)
         return CTarget(str(manifest.harness), kind or _infer_kind(name or "", manifest), name, wsl=manifest.wsl)
@@ -106,6 +112,28 @@ def _seed_random(seed_hex, label):
     return random.Random(label)
 
 
+def _revision_conflict(manifest, target) -> str | None:
+    """Revision-bound manifests (version is a full 40-hex commit, as
+    in the enc_rust regression) may only run against a binary that
+    reports the same revision via its info line (rev=). A mismatch
+    or an unreported revision is a provenance conflict: the run must
+    establish nothing rather than label one build's results with
+    another revision."""
+    expected = (manifest.version or "").strip().lower()
+    if len(expected) != 40 or any(c not in "0123456789abcdef" for c in expected):
+        return None
+    reported = getattr(target, "reported_revision", None)
+    if not reported:
+        return (f"revision-bound target: manifest pins commit {expected} "
+                "but the target did not report a revision (no rev= in its "
+                "info line); refusing to run relations")
+    if str(reported).strip().lower() != expected:
+        return (f"revision conflict: manifest pins commit {expected} but "
+                f"the harness binary reports rev={reported}; refusing to "
+                "run relations against a mismatched build")
+    return None
+
+
 def _run_relations(manifest, algorithms, relation_ids, seed_hex):
     claims = []
     for algorithm in algorithms:
@@ -115,6 +143,11 @@ def _run_relations(manifest, algorithms, relation_ids, seed_hex):
             claims.extend(_not_reached_claims(manifest, [algorithm], relation_ids, f"target could not be opened: {exc}"))
             continue
         try:
+            conflict = _revision_conflict(manifest, target)
+            if conflict:
+                claims.extend(_not_reached_claims(
+                    manifest, [algorithm], relation_ids, conflict))
+                continue
             for rid in relation_ids:
                 relation = REGISTRY[rid]
                 rng = _seed_random(seed_hex, f"{rid}:{algorithm}")
@@ -126,6 +159,19 @@ def _run_relations(manifest, algorithms, relation_ids, seed_hex):
     return claims
 
 
+def run_manifest_validated(manifest, algorithms, relation_ids, seed_hex=None) -> Report:
+    """The one validated runner shared by run, reproduce, and the
+    workbench: provenance problems become NOT_REACHED claims, targets
+    are always closed, and an empty algorithms tuple means a single
+    algorithm-less target (codec/hint manifests)."""
+    algorithms = list(algorithms or [None])
+    problems = _manifest_problems(manifest)
+    if problems:
+        return Report(tuple(_not_reached_claims(
+            manifest, algorithms, relation_ids, "; ".join(problems))))
+    return Report(tuple(_run_relations(manifest, algorithms, relation_ids, seed_hex)))
+
+
 def _cmd_run(args) -> int:
     try:
         manifest = _manifest_for_path(args.path, args.set)
@@ -133,14 +179,7 @@ def _cmd_run(args) -> int:
         if args.relation and args.relation not in REGISTRY:
             raise CliError(f"unknown relation {args.relation!r}")
         algorithms = [args.algorithm] if args.algorithm else list(manifest.algorithms or [None])
-        problems = manifest.missing_paths()
-        wrong = manifest.wrong_version()
-        if wrong:
-            problems.append(wrong)
-        if problems:
-            report = Report(tuple(_not_reached_claims(manifest, algorithms, relation_ids, "; ".join(problems))))
-        else:
-            report = Report(tuple(_run_relations(manifest, algorithms, relation_ids, args.seed)))
+        report = run_manifest_validated(manifest, algorithms, relation_ids, args.seed)
     except ManifestError as exc:
         print(f"pqcheck: {exc}", file=sys.stderr)
         return EXIT_BAD
@@ -153,6 +192,10 @@ def _cmd_run(args) -> int:
         print(json.dumps(_report_json(report), indent=2))
     else:
         Report.emit(report.to_text())
+    if getattr(args, "html", None):
+        Path(args.html).write_text(report.to_html(), encoding="utf-8")
+        # stderr: stdout must stay valid JSON when --json is also used
+        print(f"HTML report written to {args.html}", file=sys.stderr)
     return report.exit_code()
 
 
@@ -171,6 +214,15 @@ def _report_json(report: Report) -> dict:
     return {"counts": report.counts(), "conclusive": report.is_conclusive_anywhere(), "claims": [claim_dict(c) for c in report.claims]}
 
 
+def _safe_filename_part(text: str) -> str:
+    """Make a filename component safe on NTFS: a ':' in an algorithm
+    name (kem:ML-KEM-768) would otherwise create an NTFS alternate
+    data stream instead of a discoverable .py file."""
+    import re
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("._")
+    return cleaned or "target"
+
+
 def _write_reproducers(directory: Path, manifest, args, report: Report):
     directory.mkdir(parents=True, exist_ok=True)
     manifest_arg = str(manifest.path)
@@ -178,7 +230,9 @@ def _write_reproducers(directory: Path, manifest, args, report: Report):
     for claim in report.defects():
         rid = claim.method.name
         algorithm = claim.subject.algorithm
-        fname = directory / f"reproduce_{rid}_{algorithm or 'target'}.py".replace("/", "_")
+        fname = directory / (
+            f"reproduce_{_safe_filename_part(rid)}_"
+            f"{_safe_filename_part(algorithm or 'target')}.py")
         sets = "".join(f' "--set", "{s}",' for s in (args.set or ()))
         body = f'''"""Standalone reproducer for {rid} on {claim.subject}. Generated by pqcheck."""
 import sys
@@ -192,6 +246,17 @@ if __name__ == "__main__":
         fname.write_text(body, encoding="utf-8")
 
 
+def _manifest_problems(manifest) -> list[str]:
+    """Provenance checks shared by run and reproduce: a target is
+    never opened when its paths are missing or its installed version
+    disagrees with the manifest's pinned version."""
+    problems = list(manifest.missing_paths())
+    wrong = manifest.wrong_version()
+    if wrong:
+        problems.append(wrong)
+    return problems
+
+
 def _cmd_reproduce(args) -> int:
     try:
         manifest = Manifest.load(args.manifest).with_overrides(args.set)
@@ -199,11 +264,7 @@ def _cmd_reproduce(args) -> int:
             raise CliError(f"unknown relation {args.relation!r}")
         algorithms = [args.algorithm] if args.algorithm else list(manifest.algorithms or [None])
         algorithm = algorithms[0]
-        problems = manifest.missing_paths()
-        if problems:
-            report = Report(tuple(_not_reached_claims(manifest, [algorithm], [args.relation], "; ".join(problems))))
-        else:
-            report = Report(tuple(_run_relations(manifest, [algorithm], [args.relation], args.seed)))
+        report = run_manifest_validated(manifest, [algorithm], [args.relation], args.seed)
     except ManifestError as exc:
         print(f"pqcheck: {exc}", file=sys.stderr)
         return EXIT_BAD
@@ -249,6 +310,7 @@ def _cmd_demo(args) -> int:
     from pqcheck.verdict import ClaimError, Method, Subject
 
     failures = []
+    demo_claims = []
 
     print("=== Act 1: precision on clean reference & boundary targets ===")
     clean_targets = [
@@ -283,6 +345,7 @@ def _cmd_demo(args) -> int:
     ]
     for rid, target, label in flagships:
         claim = _demo_run(rid, target, label)
+        demo_claims.append(claim)
         report = Report((claim,))
         print(f"--- {rid} on {label} ---")
         Report.emit(report.to_text())
@@ -297,9 +360,11 @@ def _cmd_demo(args) -> int:
     print("=== Act 3: the loud reporter guarantee ===")
     broken = ToySig(mutant="refuses_every_message")
     controlled = _demo_run("sig-message-binding", broken, "ToySig[refuses_every_message]")
+    demo_claims.append(controlled)
     print(f"  controlled relation sig-message-binding: {controlled.verdict.value} "
           f"({controlled.evidence or controlled.notes})")
     loud = _demo_run("core-sig-round-trip", broken, "ToySig[refuses_every_message]")
+    demo_claims.append(loud)
     print(f"  core-sig-round-trip (needs_control=False): {loud.verdict.value} "
           f"({loud.evidence})")
     if controlled.verdict is not Verdict.NOT_REACHED:
@@ -325,6 +390,10 @@ def _cmd_demo(args) -> int:
     except ClaimError as exc:
         print(f"  Claim refuses secret-shaped material: {exc}")
 
+    if getattr(args, "html", None):
+        Path(args.html).write_text(Report(tuple(demo_claims)).to_html(), encoding="utf-8")
+        print(f"HTML report written to {args.html}")
+
     print()
     if failures:
         print("demo FAILED:")
@@ -345,6 +414,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--algorithm")
     run.add_argument("--seed")
     run.add_argument("--json", action="store_true")
+    run.add_argument("--html", help="also write a single-file HTML report to this path")
     run.add_argument("--reproducers")
     run.set_defaults(fn=_cmd_run)
     repro = sub.add_parser("reproduce")
@@ -359,7 +429,11 @@ def build_parser() -> argparse.ArgumentParser:
     ui = sub.add_parser("ui"); ui.add_argument("folder", nargs="?")
     ui.set_defaults(fn=lambda a: __import__("pqcheck.tui", fromlist=["run"]).run(a.folder))
     demo = sub.add_parser("demo", help="four-act judge showcase (fast, self-contained)")
+    demo.add_argument("--html", help="also write the Act 2/3 claims as a single-file HTML report")
     demo.set_defaults(fn=_cmd_demo)
+    web = sub.add_parser("web", help="local browser workbench (127.0.0.1 only)")
+    web.add_argument("--port", type=int, default=8420)
+    web.set_defaults(fn=lambda a: __import__("pqcheck.web", fromlist=["serve"]).serve(a.port))
     return parser
 
 

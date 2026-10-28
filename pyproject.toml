@@ -16,4 +16,6 @@ pqcheck = "pqcheck.cli:main"
 packages = ["pqcheck", "pqcheck.adapters", "pqcheck.backtest", "pqcheck.relations", "pqcheck.testing"]
 
 [tool.setuptools.package-data]
-"pqcheck.adapters" = ["*.c", "*.h", "*.sh", "*.mjs", "rust/*"]
+"pqcheck.adapters" = ["*.c", "*.h", "*.sh", "*.mjs", "rust/*", "rust/falcon-profiler/Cargo.toml", "rust/falcon-profiler/src/*", "templates/*"]
+"pqcheck.testing" = ["*.json"]
+"pqcheck" = ["assets/probes/*.py", "assets/probes/*.md", "assets/manifests/*.json", "assets/manifests/*.md"]

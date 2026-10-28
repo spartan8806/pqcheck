@@ -1,0 +1,17 @@
+# Local stand-in for the upstream falcon-profiler proc-macro crate.
+#
+# The pinned upstream falcon-rust v0.3.0 workspace carries
+# falcon-profiler as a path-only member (it is not the crates.io
+# package the vendored encoding.rs was built against in-tree). Its
+# `profiling` attribute only instruments functions when profiling is
+# enabled; as a no-op passthrough it changes no codec behaviour.
+# This crate exists so the byte-identical upstream encoding.rs
+# (see ../upstream_encoding.rs) compiles unmodified.
+[package]
+name = "falcon-profiler"
+version = "0.3.0"
+edition = "2021"
+description = "No-op passthrough for falcon-rust's profiling attribute (local shim)"
+
+[lib]
+proc-macro = true

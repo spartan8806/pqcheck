@@ -41,7 +41,10 @@ class NobleTarget(ProcessTarget):
         env = dict(os.environ)
         env["PQCHECK_NODE_CWD"] = self.node_cwd
         super().__init__([node, str(bridge_path), self.algorithm], timeout=timeout, cwd=self.node_cwd, env=env)
-        self.oracle = "@noble/post-quantum (independent JS implementation)"
+        # NOT an independent oracle: pqcheck signs and verifies through
+        # this one implementation, so every check is a self-referential
+        # invariant. Claiming an independent oracle would be unearned.
+        self.oracle = None
         info = self._request({"op": "info"})
         if not info.ok or not isinstance(info.value, dict):
             detail = info.detail if isinstance(info, Outcome) else "no info"

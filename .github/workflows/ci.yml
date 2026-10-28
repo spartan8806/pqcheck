@@ -63,3 +63,19 @@ jobs:
           set -e
           echo "exit code: $code"
           test "$code" -eq 2
+
+  native:
+    # Designated native-verification job. builds the C/PQClean and
+    # restored Rust harnesses and executes their checks, plus the
+    # enc_rust vulnerable/fixed regression and an isolated-wheel
+    # install test. In this job, missing required tools or skipped
+    # required checks FAIL the job (see tools/native_ci.sh).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native builds, native checks, enc_rust regression, wheel test
+        run: bash tools/native_ci.sh

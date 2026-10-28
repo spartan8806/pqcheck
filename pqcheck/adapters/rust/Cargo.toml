@@ -1,0 +1,38 @@
+[package]
+name = "pqcheck-codec-harness"
+version = "0.1.0"
+edition = "2021"
+
+# The codec under test is the ACTUAL pinned upstream falcon-rust
+# encoding code, not a reimplementation:
+#
+#   upstream: falcon-rust v0.3.0
+#   commit:   8845fe573b2108a1a84eced6c438a4aeb6b3773c
+#   file:     falcon-rust/src/encoding.rs, vendored byte-identical as
+#             upstream_encoding.rs in this directory
+#   sha256 (LF-normalized): a6eb5fd5e891c69627b76cd6ef249a54392730000624b5afa6aec78032eae02a
+#   git blob id at that commit: d8dee7cc5606d6fef1ff9c61e734d25b15136969
+#
+# Why vendored: at the pinned revision upstream declares
+# `pub(crate) mod encoding`, so no external crate can import
+# falcon_rust::encoding::{compress, decompress} (rustc E0603).
+# Vendoring the unmodified file is the only way to compile and run
+# the pinned upstream functions themselves; a test in pqcheck's
+# suite pins the file's SHA-256 so any drift fails loudly.
+# codec_harness.rs contains only the line-protocol shell.
+#
+# Dependencies below are exactly the extern crates the upstream
+# file imports, at the versions upstream's own build resolved
+# (bit-vec 0.8, itertools 0.14, num 0.4). falcon-profiler is
+# upstream's path-only workspace member; the local no-op shim in
+# ./falcon-profiler supplies its `profiling` attribute.
+
+[dependencies]
+bit-vec = "=0.8.0"
+itertools = "=0.14.0"
+num = "=0.4.3"
+falcon-profiler = { path = "falcon-profiler" }
+
+[[bin]]
+name = "pqcheck_codec_harness"
+path = "codec_harness.rs"

@@ -1,0 +1,1 @@
+{"target": "enc_rust", "version": "121385c2c9bab5ab509104b3e7b13259fc8a4080", "adapter": "c", "harness": "../regressions/enc_rust/target-vuln/release/enc_rust_harness", "wsl": false, "algorithms": ["kem:ML-KEM-768"]}

@@ -143,7 +143,7 @@ static uint8_t *parse_hex(const char *s, size_t *out_len) {
     if (strcmp(s, "-") == 0) { *out_len = 0; uint8_t *p = malloc(1); return p; }
     size_t n = strlen(s);
     if (n % 2) return NULL;
-    uint8_t *buf = malloc(n / 2 + g_guard_n + 1);
+    uint8_t *buf = malloc(n / 2 + g_guard_n);
     if (!buf) return NULL;
     for (size_t i = 0; i < n / 2; i++) {
         int hi = hexval(s[2 * i]), lo = hexval(s[2 * i + 1]);

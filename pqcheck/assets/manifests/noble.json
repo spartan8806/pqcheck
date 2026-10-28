@@ -1,0 +1,7 @@
+{
+  "target": "@noble/post-quantum",
+  "version": "0.6.1",
+  "adapter": "noble",
+  "node_cwd": "${NOBLE_DIR}",
+  "algorithms": ["falcon512", "falcon512padded", "ml-dsa-44", "ml-kem-768"]
+}

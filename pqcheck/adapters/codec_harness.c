@@ -79,7 +79,7 @@ int main(void) {
             if (!a) { printf("ERR decode needs hex\n"); fflush(stdout); continue; }
             size_t hn = strlen(a);
             if (strcmp(a, "-") == 0) hn = 0;
-            uint8_t *in = malloc((hn / 2) + 1);
+            uint8_t *in = malloc(hn / 2);
             size_t in_len = hn / 2; int bad = 0;
             for (size_t i = 0; i < in_len; i++) {
                 int hi = hexval(a[2 * i]), lo = hexval(a[2 * i + 1]);

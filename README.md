@@ -83,3 +83,7 @@ pqcheck is a defensive assurance tool. It only talks to targets the
 operator points it at locally, through declarative manifests. Reports are
 designed to be pasted into public bug trackers: secret-shaped material is
 refused in claims and redacted from quoted target output.
+
+## Source checkout vs installed wheel
+
+From a source checkout, everything in this README works as written, including `python -m pqcheck.probes` (the standing probes in `probes/`) and the shipped manifests in `manifests/`. In an installed wheel, the same probes and example manifests ship inside the package as bundled assets (`pqcheck/assets/probes` and `pqcheck/assets/manifests`), and `python -m pqcheck.probes` finds them there; to locate the bundled manifests on disk: `python -c "import pqcheck, pathlib; print(pathlib.Path(pqcheck.__file__).parent / 'assets' / 'manifests')"`. The bundled copies are byte-identical to the checkout files (a unit test enforces this). Building real C/Rust/Java harnesses still requires a source checkout and a toolchain.

@@ -13,6 +13,8 @@ ADAPTERS: dict[str, dict] = {
     "noble": {"required": ("node_cwd",), "optional": ("padded",), "algorithms": "required"},
     "codec": {"required": ("harness",), "optional": ("oracle",), "algorithms": "forbidden"},
     "hint": {"required": ("harness",), "optional": ("oracle",), "algorithms": "forbidden"},
+    "python": {"required": ("module",), "optional": (), "algorithms": "required"},
+    "exec": {"required": ("command",), "optional": ("kind",), "algorithms": "required"},
 }
 
 
@@ -82,6 +84,16 @@ class Manifest:
             raise ManifestError("manifest field 'node_cwd' must be a string path")
         self.kind = data.get("kind")
         self.oracle = data.get("oracle")
+        module = data.get("module")
+        if "module" in spec["required"] and not (isinstance(module, str) and module.strip()):
+            raise ManifestError("adapter 'python' requires manifest field 'module' (dotted name or file path)")
+        self.module: str | None = module if isinstance(module, str) else None
+        command = data.get("command")
+        if "command" in spec["required"]:
+            if not (isinstance(command, list) and command
+                    and all(isinstance(c, str) and c for c in command)):
+                raise ManifestError("adapter 'exec' requires manifest field 'command' (non-empty argv list)")
+        self.command: list[str] | None = list(command) if isinstance(command, list) else None
 
     @classmethod
     def load(cls, path) -> "Manifest":
@@ -120,6 +132,11 @@ class Manifest:
             problems.append(f"harness not found: {self.harness}")
         if self.node_cwd is not None and not self.node_cwd.exists():
             problems.append(f"node_cwd not found: {self.node_cwd}")
+        if self.adapter == "python" and self.module and (
+                self.module.endswith(".py") or "/" in self.module or "\\" in self.module):
+            module_path = _expand(self.module, self.base)
+            if not module_path.exists():
+                problems.append(f"python module file not found: {module_path}")
         return problems
 
     def wrong_version(self) -> str | None:

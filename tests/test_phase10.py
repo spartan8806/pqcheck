@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class Phase10Tests(unittest.TestCase):
     def test_shipped_manifests_load(self):
         manifests = sorted((ROOT / "manifests").glob("*.json"))
-        self.assertEqual(len(manifests), 5)
+        self.assertEqual(len(manifests), 6)
         for path in manifests:
             manifest = Manifest.load(path)
             self.assertTrue(manifest.target)

@@ -32,6 +32,10 @@ with tempfile.TemporaryDirectory() as td:
 import re  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+if not (ROOT / "README.md").is_file():
+    print("relative harness path resolves against the manifest's directory")
+    print("SKIP: documentation-path half needs source-checkout README/docs")
+    raise SystemExit(77)
 LINK_RE = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 PATH_RE = re.compile(r"`((?:\\.\\./|pqcheck/|probes/|manifests/|tools/|docs/|tests/)[^`\s]+)`")
 EXTS = (".py", ".md", ".json", ".sh", ".toml", ".yml", ".mjs", ".c", ".h", ".rs")

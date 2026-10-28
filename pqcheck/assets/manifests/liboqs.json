@@ -1,0 +1,8 @@
+{
+  "target": "liboqs",
+  "version": "0.16.0",
+  "adapter": "c",
+  "harness": "../pqcheck/adapters/harness_liboqs",
+  "wsl": false,
+  "algorithms": ["kem:ML-KEM-512", "kem:ML-KEM-768", "kem:ML-KEM-1024"]
+}

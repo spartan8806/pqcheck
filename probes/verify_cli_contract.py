@@ -12,6 +12,10 @@ from probe_lib import ROOT, check, passed  # noqa: E402
 
 from pqcheck.cli import main  # noqa: E402
 
+if not (ROOT / 'tests' / 'fake_harness.py').is_file():
+    print('SKIP: tests/fake_harness.py is a source-checkout file, not shipped in the wheel')
+    raise SystemExit(77)
+
 
 def run(argv):
     buf = io.StringIO()

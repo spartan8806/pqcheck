@@ -91,6 +91,63 @@ class BridgeTests(unittest.TestCase):
             codec.close(); hint.close()
 
 
+class ExecAdapterTests(unittest.TestCase):
+    """The subprocess line protocol is execution-tested without gcc
+    by driving templates/python_harness.py through the exec adapter."""
+
+    HARNESS = ROOT / "pqcheck" / "adapters" / "templates" / "python_harness.py"
+
+    def _manifest(self, kind, algorithm):
+        from pqcheck.manifest import Manifest
+        return Manifest({
+            "target": "python-harness-template", "version": "1.0.0",
+            "adapter": "exec", "kind": kind,
+            "command": [sys.executable, str(self.HARNESS)],
+            "algorithms": [f"{kind}:{algorithm}"],
+        }, ROOT / "manifest.json")
+
+    def _run_relation(self, rid, kind, algorithm):
+        import random
+
+        import pqcheck.relations  # noqa: F401
+        from pqcheck.cli import open_target
+        from pqcheck.relations.base import REGISTRY
+        from pqcheck.verdict import Subject
+        manifest = self._manifest(kind, algorithm)
+        target = open_target(manifest, f"{kind}:{algorithm}")
+        try:
+            subject = Subject(target="python-harness-template",
+                              commit="1.0.0", algorithm=algorithm)
+            return REGISTRY[rid].run(target, subject, random.Random("exec-test"))
+        finally:
+            target.close()
+
+    def test_exec_kem_clean_over_wire(self):
+        from pqcheck.verdict import Verdict
+        claim = self._run_relation("kem-fo-liveness", "kem", "WireKem")
+        self.assertIs(claim.verdict, Verdict.NO_DEFECT_FOUND, claim.evidence)
+
+    def test_exec_kem_mutant_over_wire(self):
+        from pqcheck.verdict import Verdict
+        claim = self._run_relation(
+            "kem-fo-liveness", "kem", "WireKem[no_reencryption_check]")
+        self.assertIs(claim.verdict, Verdict.DEFECT_FOUND, claim.evidence)
+
+    def test_exec_sig_over_wire(self):
+        from pqcheck.verdict import Verdict
+        claim = self._run_relation("core-sig-round-trip", "sig", "WireSig")
+        self.assertIs(claim.verdict, Verdict.NO_DEFECT_FOUND, claim.evidence)
+
+
+class PythonAdapterTests(unittest.TestCase):
+    def test_python_reference_manifest_opens_toys(self):
+        from pqcheck.cli import open_target
+        from pqcheck.manifest import Manifest
+        manifest = Manifest.load(ROOT / "manifests" / "python-reference.json")
+        names = {type(open_target(manifest, a)).__name__ for a in manifest.algorithms}
+        self.assertEqual(names, {"PackedEkKem", "ToySig", "ToyFalconSig", "ToyMldsaSig"})
+
+
 class ParseTests(unittest.TestCase):
     def test_parse_hex_reply(self):
         self.assertEqual(parse_hex_reply("00ff"), b"\x00\xff")

@@ -7,6 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from probe_lib import check, passed  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+if not (ROOT / 'README.md').is_file():
+    print('SKIP: README/docs are source-checkout files, not shipped in the wheel')
+    raise SystemExit(77)
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
 docs_readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
 

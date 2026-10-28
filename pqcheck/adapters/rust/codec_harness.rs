@@ -1,4 +1,5 @@
-//! pqcheck codec line protocol in Rust (falcon_rust encoding surface).
+//! pqcheck codec line protocol in Rust, forwarding to the pinned
+//! upstream falcon-rust v0.3.0 compression codec.
 //!
 //! Protocol (identical to codec_bridge.py):
 //!   info           -> OK kind=codec ncoef=512 sig=625 fixed=1
@@ -6,13 +7,25 @@
 //!                  -> OK <hex> | REJ <why> | ERR <why>
 //!   decode <hex|-> -> OK <int16 block hex> | REJ <why> | ERR <why>
 //! Buffers are handled at exact lengths; REJ is the codec refusing an
-//! input, ERR is this harness declining. This proves the line-protocol
-//! contract is language-independent; it contains no cryptography of its
-//! own and simply forwards to falcon_rust::encoding.
+//! input, ERR is this harness declining.
+//!
+//! This file is only the protocol shell. The codec itself is
+//! upstream's `compress`/`decompress`, compiled from the
+//! byte-identical vendored copy in upstream_encoding.rs
+//! (falcon-rust v0.3.0, commit
+//! 8845fe573b2108a1a84eced6c438a4aeb6b3773c, sha256
+//! a6eb5fd5e891c69627b76cd6ef249a54392730000624b5afa6aec78032eae02a).
+//! Upstream marks its encoding module `pub(crate)`, so the vendored
+//! file is how the pinned upstream functions are linked unmodified;
+//! see Cargo.toml and README.md in this directory. There is no
+//! locally written codec in this harness.
 
 use std::io::{self, BufRead, Write};
 
-use falcon_rust::encoding::{compress, decompress};
+#[path = "upstream_encoding.rs"]
+mod upstream_encoding;
+
+use upstream_encoding::{compress, decompress};
 
 const N: usize = 512;
 const SLEN: usize = 625;
@@ -78,7 +91,7 @@ fn main() {
                     reply(&mut stdout, "ERR bad coefficient");
                     continue;
                 }
-                match compress(&coeffs) {
+                match compress(&coeffs, SLEN) {
                     Some(stream) => reply(&mut stdout, &format!("OK {}", hex_encode(&stream))),
                     None => reply(&mut stdout, "REJ encode refused"),
                 }

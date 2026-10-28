@@ -1,0 +1,19 @@
+# Regenerable build artifacts and downloaded dependencies.
+# None of this is source; tools/native_ci.sh and the regression
+# READMEs recreate all of it.
+__pycache__/
+*.egg-info/
+build/
+vendor/
+.wheel-venv/
+.wheel-target/
+demo_report.html
+enc-*.html
+regressions/enc_rust/vendor/
+regressions/enc_rust/target-vuln/
+regressions/enc_rust/target-fixed/
+pqcheck/adapters/rust/target/
+pqcheck/adapters/codec_harness_bin
+pqcheck/adapters/harness_liboqs
+pqcheck/adapters/harness_pqclean
+pqcheck/adapters/pqcheck_codec_harness
