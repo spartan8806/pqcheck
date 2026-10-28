@@ -177,7 +177,9 @@ for required in verify_roundtrip_order.py verify_falcon_cross_vectors.py; do
 done
 
 # --- isolated wheel: project-local venv, installed-package run -----
-python3 -m pip wheel . -w /tmp/dist --no-deps --no-build-isolation -q || fail "wheel build"
+python3 -m pip wheel . -w /tmp/dist --no-deps -q 2>/dev/null \
+  || python3 -m pip wheel . -w /tmp/dist --no-deps --no-build-isolation -q \
+  || fail "wheel build"
 rm -rf .wheel-venv .wheel-target
 if python3 -m venv .wheel-venv 2>/dev/null; then
   WHEEL_PY="$PWD/.wheel-venv/bin/python"
