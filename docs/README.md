@@ -6,10 +6,10 @@ Reading order for a technical reviewer:
    commands; watch the exit codes.
 2. [00_SPEC_pqc_assurance.md](00_SPEC_pqc_assurance.md) — the formal
    assurance model: verdicts, epistemic refusal rules, failure taxonomy.
-3. [01_SPEC_relations.md](01_SPEC_relations.md) — all 32 relations:
+3. [01_SPEC_relations.md](01_SPEC_relations.md) — all 34 relations:
    properties, controls, capabilities, ceilings, false-positive modes.
 4. [02_VALIDATION.md](02_VALIDATION.md) — how precision and recall are
-   validated (toy targets, 41 planted mutants, boundary targets, seeds).
+   validated (toy targets, 43 planted mutants, boundary targets, seeds).
 5. [03_RESOLVED_fo_liveness.md](03_RESOLVED_fo_liveness.md) — the
    FO-liveness deep-dive: decryption fibers, compression witnesses, and
    how a dead FO check is separated from encoding slack.

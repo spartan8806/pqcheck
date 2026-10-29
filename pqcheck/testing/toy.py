@@ -178,6 +178,10 @@ class ToySig:
         msg_eff = b"" if self.mutant == "msg_unbound" else bytes(msg)
         if self.mutant == "msg_prefix_only":
             msg_eff = msg_eff[:8]
+        if self.mutant == "msg_truncates_at_4096":
+            msg_eff = msg_eff[:4096]
+        if self.mutant == "msg_truncates_at_8192":
+            msg_eff = msg_eff[:8192]
         flag = b"" if self.mutant == "verify_ignores_prehash_domain" else (b"P" if prehash else b"H")
         if self.mutant == "no_ctx_length_prefix":
             x = hashlib.shake_256()
@@ -264,6 +268,8 @@ SIG_MUTANTS = {
     "verify_ignores_pk_arg": _factory(ToySig, "verify_ignores_pk_arg"),
     "msg_unbound": _factory(ToySig, "msg_unbound"),
     "msg_prefix_only": _factory(ToySig, "msg_prefix_only"),
+    "msg_truncates_at_4096": _factory(ToySig, "msg_truncates_at_4096"),
+    "msg_truncates_at_8192": _factory(ToySig, "msg_truncates_at_8192"),
     "verify_accepts_trailing": _factory(ToySig, "verify_accepts_trailing"),
     "verify_drops_byte_at_rate_multiple": _factory(ToySig, "verify_drops_byte_at_rate_multiple"),
     "verify_ignores_slack": _factory(ToySig, "verify_ignores_slack"),

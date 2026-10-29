@@ -87,7 +87,7 @@ class EkModulusTests(unittest.TestCase):
 
 
 class MutantMatrixTests(unittest.TestCase):
-    def test_canonical_41_mutant_keys(self):
+    def test_canonical_43_mutant_keys(self):
         from pqcheck.testing import (
             CODEC_MUTANTS, FALCON_MUTANTS, KEM_MUTANTS, LWE_MUTANTS,
             MLDSA_MUTANTS, PACKED_EK_MUTANTS, SIG_MUTANTS,
@@ -103,7 +103,8 @@ class MutantMatrixTests(unittest.TestCase):
             "refuses_every_message", "sig_overruns_declared_size",
             "no_ctx_length_prefix", "verify_accepts_degenerate",
             "verify_ignores_prehash_domain", "verify_ignores_pk_arg",
-            "msg_unbound", "msg_prefix_only", "verify_accepts_trailing",
+            "msg_unbound", "msg_prefix_only", "msg_truncates_at_4096",
+            "msg_truncates_at_8192", "verify_accepts_trailing",
             "verify_drops_byte_at_rate_multiple", "verify_ignores_slack",
             "verify_reads_past_msg", "msg_len_wraps_at_32bit"]))
         self.assertEqual(sorted(CODEC_MUTANTS), sorted([

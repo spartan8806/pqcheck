@@ -67,6 +67,13 @@ class PackedEkKem:
 
     def __init__(self, mutant=None):
         self.mutant = mutant
+        # The toy validates raw keys on entry, and says so in the same
+        # contract shape a manifest declares (Set 3, Phase 12).
+        self.api_contract = {
+            "standard": "FIPS 203 (toy layout)", "key_format": "ML-KEM-shaped serialized",
+            "ek": "validate-on-entry", "dk": "validate-on-entry",
+            "basis": "toy validates serialized keys on entry by construction",
+        }
         self.caps = frozenset({
             Capability.KEM, Capability.PINNED_RANDOMNESS,
             Capability.EXPLICIT_SIG_LENGTH, Capability.GUARD_FILL,
@@ -126,7 +133,7 @@ class PackedEkKem:
         hh = dk[32 + ek_len:64 + ek_len]
         z = dk[64 + ek_len:96 + ek_len]
         if hh != hashlib.sha3_256(ek).digest() and self.mutant != "no_dk_hash_check":
-            return _ok(_h(b"rej", z, ct))
+            return _rej("dk H(ek) mismatch")
         return _ok(_h(b"ss", ek, ct))
 
 

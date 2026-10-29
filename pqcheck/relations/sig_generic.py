@@ -8,6 +8,38 @@ from pqcheck.relations.base import Finding, NotApplicable, register
 from pqcheck.target import Capability
 
 
+def _signing_randomness_note(target, rng) -> str:
+    """Report signing randomness as observed, never as inferred.
+
+    PINNED_RANDOMNESS only establishes that seeded key generation
+    reproduces the same keys; it says nothing about signing (Noble
+    ML-DSA keygen is seed-deterministic while its signing is hedged
+    and produces different signatures). So signing determinism is
+    observed directly: sign one message twice under one key."""
+    kg = pair(target.keygen(rng.randbytes(16)))
+    if kg is None:
+        return ("signing randomness not controlled by pqcheck (keygen "
+                "unavailable for a determinism probe); each original "
+                "message was confirmed to verify before edits")
+    _pk, sk = kg
+    probe = b"pqcheck signing-randomness probe"
+    s1 = target.sign(sk, probe)
+    s2 = target.sign(sk, probe)
+    if ok(s1) and ok(s2):
+        if s1.value == s2.value:
+            return ("signing observed deterministic for the probed key "
+                    "and message (two signings agreed byte-for-byte); "
+                    "pqcheck does not pin signing randomness beyond "
+                    "that observation")
+        return ("signing randomness not controlled by pqcheck (two "
+                "signings of one message under one key produced "
+                "different signatures); each original message was "
+                "confirmed to verify before edits")
+    return ("signing randomness not controlled by pqcheck (signing "
+            "unavailable for a determinism probe); each original "
+            "message was confirmed to verify before edits")
+
+
 def _baseline(target, rng, msg=None):
     kg = pair(target.keygen(rng.randbytes(16)))
     if kg is None:
@@ -49,23 +81,64 @@ class WrongKeyRejection(SigRelation):
 class MessageBinding(SigRelation):
     id = "sig-message-binding"
     property = "a signature binds the exact message bytes and length"
-    ceiling = "does not establish binding of context or mode unless separately checked"
+    ceiling = ("covers the tested message lengths and edits only; does not "
+               "establish binding for every possible message, nor binding "
+               "of context or mode unless separately checked")
+
+    # Short-message probes retained; boundary lengths added in Set 3:
+    # immediately below, at, and above each boundary.
+    BOUNDARIES = (256, 512, 1024, 4096, 65536)
+    MAX_ATTEMPTS = 1024
+    MAX_MESSAGE = 65537
 
     def check(self, target, rng):
+        randomness_note = _signing_randomness_note(target, rng)
+        lengths = {0, 1, 8, 9, 16, 33, 64, 137, 300}
+        for b in self.BOUNDARIES:
+            lengths.update({b - 1, b, b + 1})
         units = 0
-        for n in (1, 8, 9, 16, 33, 64, 137, 300):
-            base = _baseline(target, rng, rng.randbytes(n))
+        for n in sorted(lengths):
+            if units >= self.MAX_ATTEMPTS:
+                return Finding(None, f"attempt budget ({self.MAX_ATTEMPTS}) exhausted before length {n}; coverage incomplete", units, "message binding (budget exhausted)", notes=randomness_note)
+            msg = rng.randbytes(n) if n else b""
+            base = _baseline(target, rng, msg)
             if base is None:
-                return Finding(None, "baseline failed", units, "message binding")
+                return Finding(None, "baseline failed (original did not verify)", units, "message binding", notes=randomness_note)
             pk, sk, msg, sig = base
-            edits = [rng.randbytes(n), flip(msg, len(msg) - 1, 1), flip(msg, 0, 1), msg[:-1], b"", msg + b"\x00"]
-            for e in edits:
-                if e == msg:
-                    continue
+            edits = []  # (operation, offset, altered)
+            def add(op, offset, altered):
+                if len(altered) > self.MAX_MESSAGE:
+                    return
+                if altered != msg and all(altered != e for _, _, e in edits):
+                    edits.append((op, offset, altered))
+            if n:
+                add("flip-first-byte", 0, flip(msg, 0, 1))
+                add("flip-middle-byte", n // 2, flip(msg, n // 2, 1))
+                add("flip-last-byte", n - 1, flip(msg, n - 1, 1))
+                for b in self.BOUNDARIES:
+                    if b - 1 < n:
+                        add(f"flip-before-boundary-{b}", b - 1, flip(msg, b - 1, 1))
+                    if b < n:
+                        add(f"flip-after-boundary-{b}", b, flip(msg, b, 1))
+                add("remove-final-byte", n - 1, msg[:-1])
+            add("append-zero-byte", n, msg + b"\x00")
+            add("prepend-byte", 0, b"\xa5" + msg)
+            add("empty-message", 0, b"")
+            for op, offset, altered in edits:
+                if units >= self.MAX_ATTEMPTS:
+                    return Finding(None, f"attempt budget ({self.MAX_ATTEMPTS}) exhausted during length {n}; coverage incomplete", units, "message binding (budget exhausted)", notes=randomness_note)
                 units += 1
-                if ok(target.verify(pk, e, sig)):
-                    return Finding(False, f"signature accepted a different message (length {len(e)} vs {len(msg)})", units, "message binding edits", reproduce="re-run pqcheck sig-message-binding with the pinned seed")
-        return Finding(True, "message edits rejected across 8 lengths", units, "message binding edits")
+                if ok(target.verify(pk, altered, sig)):
+                    return Finding(
+                        False,
+                        f"signature accepted an altered message: original length {len(msg)}, "
+                        f"altered length {len(altered)}, edit {op} at byte offset {offset}; "
+                        "the original signature was confirmed to verify first "
+                        "(direct signing, empty context)",
+                        units, "message binding short+boundary lengths",
+                        reproduce="re-run pqcheck sig-message-binding with the pinned seed",
+                        notes=randomness_note)
+        return Finding(True, f"message edits rejected across short and boundary lengths (largest {self.MAX_MESSAGE} bytes)", units, "message binding short+boundary lengths", notes=randomness_note)
 
 
 @register

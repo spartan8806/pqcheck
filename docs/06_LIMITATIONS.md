@@ -68,7 +68,7 @@ this document; please file it.
   have finite budgets (`n_signatures`, bit/combo caps). Absence of a
   witness inside the budget is stated as exactly that.
 - **Toys are not libraries.** Selftest green means pqcheck's
-  relations behave on pqcheck's own reference toys and 41 planted
+  relations behave on pqcheck's own reference toys and 43 planted
   mutants. Real-library assurance comes only from running the
   shipped manifests against real builds (see
   [04_BACKTEST.md](04_BACKTEST.md) for what is demonstrated versus

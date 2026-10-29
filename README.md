@@ -34,7 +34,7 @@ established nothing, `3` bad CLI/manifest.
 ## Quick start
 
 ```sh
-python -m pqcheck relations          # the 32 registered relations
+python -m pqcheck relations          # the 34 registered relations
 python -m pqcheck adapters           # manifest adapters
 python -m pqcheck.selftest           # toys + mutants acceptance suite
 python -m pqcheck.testing.precision  # adversarial precision boundary suite

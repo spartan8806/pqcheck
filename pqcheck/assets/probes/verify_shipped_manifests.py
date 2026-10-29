@@ -11,6 +11,19 @@ from probe_lib import MANIFESTS_DIR, check, passed  # noqa: E402
 from pqcheck.cli import main  # noqa: E402
 from pqcheck.manifest import Manifest  # noqa: E402
 
+def _runnable_here(harness) -> bool:
+    """An ELF built under WSL is 'built' but not runnable from
+    Windows (and vice versa); only runnable builds must conclude."""
+    try:
+        with open(harness, "rb") as fh:
+            magic = fh.read(4)
+    except OSError:
+        return False
+    if sys.platform.startswith("win") and magic.startswith(b"\x7fELF"):
+        return False
+    return True
+
+
 manifests = sorted(MANIFESTS_DIR.glob("*.json"))
 check(len(manifests) == 8, f"expected 8 shipped manifests, found {len(manifests)}")
 for path in manifests:
@@ -22,7 +35,7 @@ for path in manifests:
     if path.name == "python-reference.json":
         # The python adapter needs no build: it must run conclusively.
         check(code == 0, f"python-reference.json exited {code}, expected a conclusive 0 out of the box")
-    elif manifest.harness is not None and manifest.harness.exists():
+    elif manifest.harness is not None and manifest.harness.exists() and _runnable_here(manifest.harness):
         # Built harness (native CI): the round trip must conclude
         # cleanly; "nothing established" (2) here would be a failure.
         check(code == 0, f"{path.name} exited {code} with a BUILT harness, expected a conclusive 0")

@@ -46,11 +46,11 @@ class HtmlReportTests(unittest.TestCase):
 class WebDataTests(unittest.TestCase):
     def test_catalog_and_relations(self):
         catalog = web.targets_catalog()
-        self.assertEqual(len(catalog["mutants"]), 41)
+        self.assertEqual(len(catalog["mutants"]), 43)
         self.assertIn("PackedEkKem", catalog["clean"])
         self.assertEqual(len(catalog["boundary"]), 8)
         rows = web.relations_data()
-        self.assertEqual(len(rows), 32)
+        self.assertEqual(len(rows), 34)
         self.assertTrue(all("failure_class" in r for r in rows))
         self.assertEqual(len(web.relations_data(fclass="X-FO-LIVE")), 1)
 
@@ -80,6 +80,47 @@ class WebDataTests(unittest.TestCase):
         reference = web.run_named_manifest("python-reference.json")
         self.assertEqual(reference["revision"], "0.1.0b1")
         self.assertIn("gaps", reference)
+
+    def test_project_workflow_is_the_real_default(self):
+        import tempfile
+        from pathlib import Path
+
+        page = web.PAGE
+        self.assertLess(page.index('data-tab="project"'),
+                        page.index('data-tab="demo"'))
+        self.assertIn("Demo / Self-test", page)
+        root = Path(__file__).resolve().parents[1]
+        ready = web.inspect_project(str(root / "manifests" / "python-reference.json"))
+        self.assertTrue(ready["ready"], ready)
+        self.assertEqual(ready["target"], "pqcheck-reference-toys")
+        self.assertEqual(ready["revision"], "0.1.0b1")
+        run = web.run_project(str(root / "manifests" / "python-reference.json"))
+        self.assertIn("exports", run)
+        self.assertIn('"counts"', run["exports"]["json"])
+        self.assertIn("pqcheck", run["exports"]["reproduction"])
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "main.c").write_text("int main(void){return 0;}")
+            unsupported = web.inspect_project(td)
+            self.assertFalse(unsupported["ready"], unsupported)
+            self.assertTrue(unsupported["next_steps"], unsupported)
+            nowhere = web.inspect_project(str(Path(td) / "does-not-exist"))
+            self.assertFalse(nowhere["found"])
+
+    def test_about_page_explains_how_and_why(self):
+        self.assertIn('data-tab="about"', web.PAGE)
+        for phrase in ("How pqcheck works, and why", "no score",
+                       "Inconclusive", "What pqcheck cannot establish",
+                       "examples/vulnerable-kem"):
+            self.assertIn(phrase, web.PAGE)
+
+    def test_reader_verdict_inconclusive_for_one_sided(self):
+        result = web.run_target("clean:ToyKem")
+        flat = [c for bucket in result["buckets"].values() for c in bucket]
+        one_sided = [c for c in flat if c["one_sided"]
+                     and c["verdict"] == "NO_DEFECT_FOUND"]
+        self.assertTrue(one_sided)
+        self.assertTrue(all(c["reader_verdict"].startswith("Inconclusive")
+                            for c in one_sided))
 
     def test_backtest_data(self):
         data = web.backtest_data()

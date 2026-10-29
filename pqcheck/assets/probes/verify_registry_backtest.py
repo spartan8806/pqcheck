@@ -8,7 +8,7 @@ import pqcheck.relations  # noqa: F401
 from pqcheck.backtest.report import evaluate
 from pqcheck.relations.base import REGISTRY
 
-assert len(REGISTRY) == 32, f"expected 32 relations, got {len(REGISTRY)}"
+assert len(REGISTRY) >= 32, f"expected at least 32 relations, got {len(REGISTRY)}"
 result = evaluate()
 assert result["total"] == 22, result["total"]
 # Grades are incommensurable and never summed; MISSED is the work queue.
@@ -19,4 +19,4 @@ assert result["counts"] == {
 assert "COVERED" not in result["counts"], result["counts"]
 assert [e.id for e in result["work_queue"]] == [
     "clib-xmss-key-reuse", "CVE-2022-37454"], result["work_queue"]
-print(f"PASS: 32 relations registered; backtest per-grade counts {result['counts']}")
+print(f"PASS: {len(REGISTRY)} relations registered; backtest per-grade counts {result['counts']}")

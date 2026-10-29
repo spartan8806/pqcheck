@@ -1,0 +1,7 @@
+{
+  "target": "vulnkem-sample (intentionally defective)",
+  "version": "1.0.0",
+  "adapter": "c",
+  "harness": "./harness.py",
+  "algorithms": ["kem:VULN-KEM-256"]
+}

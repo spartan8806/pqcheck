@@ -10,8 +10,8 @@ python -m pqcheck.selftest
 ```
 
 Expected tail: `selftest: ok (0 false positives, all mutants live and
-caught, seed gate holds)`. This runs all 32 relations against clean
-reference toys (expecting no defect) and against 41 planted mutants
+caught, seed gate holds)`. This runs all 34 relations against clean
+reference toys (expecting no defect) and against 43 planted mutants
 (expecting every mutant to be caught and every relation to fire at
 least once). For a seed sweep:
 
@@ -37,7 +37,7 @@ all refused at construction time.
 python -m pqcheck demo
 ```
 
-Act 1 runs all 32 relations on clean and boundary targets (0 defects,
+Act 1 runs all 34 relations on clean and boundary targets (0 defects,
 honest declines). Act 2 catches four flagship mutants with printed
 witnesses. Act 3 shows a completely broken signer still producing a
 loud `DEFECT_FOUND`. Act 4 shows `Report.score()` and the secret-material

@@ -143,6 +143,12 @@ def _run_relations(manifest, algorithms, relation_ids, seed_hex):
             claims.extend(_not_reached_claims(manifest, [algorithm], relation_ids, f"target could not be opened: {exc}"))
             continue
         try:
+            # The declared API validation contract travels with the
+            # target so relations can check their premises against it.
+            try:
+                target.api_contract = dict(manifest.validation)
+            except Exception:
+                pass
             conflict = _revision_conflict(manifest, target)
             if conflict:
                 claims.extend(_not_reached_claims(
@@ -241,7 +247,7 @@ sys.path.insert(0, {package_root!r})
 from pqcheck.cli import main
 
 if __name__ == "__main__":
-    raise SystemExit(main(["reproduce", {manifest_arg!r}, "--relation", {rid!r}] + (["--algorithm", {algorithm!r}] if {algorithm!r} else []) + [{sets}] + (["--seed", {args.seed!r}] if {args.seed!r} else [])))
+    raise SystemExit(main(["reproduce", {manifest_arg!r}, "--relation", {rid!r}, "--json"] + (["--algorithm", {algorithm!r}] if {algorithm!r} else []) + [{sets}] + (["--seed", {args.seed!r}] if {args.seed!r} else [])))
 '''
         fname.write_text(body, encoding="utf-8")
 
@@ -271,7 +277,10 @@ def _cmd_reproduce(args) -> int:
     except CliError as exc:
         print(f"pqcheck: {exc}", file=sys.stderr)
         return EXIT_BAD
-    Report.emit(report.to_text())
+    if getattr(args, "json", False):
+        print(json.dumps(_report_json(report), indent=2))
+    else:
+        Report.emit(report.to_text())
     return report.exit_code()
 
 
@@ -422,6 +431,7 @@ def build_parser() -> argparse.ArgumentParser:
     repro.add_argument("--relation", required=True)
     repro.add_argument("--algorithm")
     repro.add_argument("--seed")
+    repro.add_argument("--json", action="store_true")
     repro.add_argument("--set", action="append", default=[], dest="set")
     repro.set_defaults(fn=_cmd_reproduce)
     rel = sub.add_parser("relations"); rel.set_defaults(fn=_cmd_relations)

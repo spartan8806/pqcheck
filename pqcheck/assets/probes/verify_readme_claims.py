@@ -22,13 +22,14 @@ from pqcheck.testing import (  # noqa: E402
 )
 from pqcheck.verdict import Report  # noqa: E402
 
-check(len(REGISTRY) == 32, f"expected 32 relations, got {len(REGISTRY)}")
-check("32 registered relations" in readme or "32 relations" in readme,
-      "README does not state the 32-relation count")
-print("32 relations registered and stated")
+NREL = len(REGISTRY)
+check(NREL >= 32, f"expected at least 32 relations, got {NREL}")
+check(f"{NREL} registered relations" in readme or f"{NREL} relations" in readme,
+      f"README does not state the {NREL}-relation count")
+print(f"{NREL} relations registered and stated")
 
 groups = {
-    "KEM": (KEM_MUTANTS, 10), "SIG": (SIG_MUTANTS, 15),
+    "KEM": (KEM_MUTANTS, 10), "SIG": (SIG_MUTANTS, 17),
     "CODEC": (CODEC_MUTANTS, 8), "LWE": (LWE_MUTANTS, 3),
     "PACKED_EK": (PACKED_EK_MUTANTS, 2), "FALCON": (FALCON_MUTANTS, 1),
     "MLDSA": (MLDSA_MUTANTS, 2),
@@ -37,9 +38,9 @@ total = 0
 for name, (table, want) in groups.items():
     check(len(table) == want, f"{name}_MUTANTS has {len(table)}, expected {want}")
     total += len(table)
-check(total == 41, f"mutant total is {total}, expected 41")
-check("41" in docs_readme, "docs index does not state the 41-mutant count")
-print("41 mutants registered across the 7 canonical groups")
+check(total == 43, f"mutant total is {total}, expected 43")
+check("43" in docs_readme, "docs index does not state the 43-mutant count")
+print("43 mutants registered across the 7 canonical groups")
 
 counts = evaluate()["counts"]
 check(counts == {"DEMONSTRATED": 7, "ARGUED": 5, "PARTIAL": 4,

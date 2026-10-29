@@ -78,6 +78,18 @@ class NobleTarget(ProcessTarget):
                 self.mldsa_hint = dict(MLDSA_GEOMETRY[self.algorithm])
                 self.hint_layout = "fips204"
         self.supports_prehash = self.algorithm.startswith("ml-dsa")
+        # Noble's ML-KEM entry points perform the FIPS 203 input
+        # checks on entry (encapsulate rejects non-canonical ek,
+        # decapsulate rejects a mismatched stored H(ek)); a manifest
+        # may override this declaration, the runner replaces it with
+        # the manifest's own when one is present.
+        if self.kind == "kem" and self.algorithm.startswith("ml-kem"):
+            self.api_contract = {
+                "standard": "FIPS 203", "key_format": "ML-KEM serialized keys",
+                "ek": "validate-on-entry", "dk": "validate-on-entry",
+                "basis": "Noble encapsulate/decapsulate perform FIPS 203 "
+                         "Sections 7.2-7.3 input checking on entry",
+            }
         self.size_semantics = "exact"
         self.name = f"NobleTarget({self.algorithm})"
         self.randomness_basis = "bridge probed seeded keygen for determinism"

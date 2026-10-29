@@ -239,3 +239,56 @@ implementation differs from, or could not be verified against,
     required checks by design. (d) Workbench gained a Generated
     Reports tab labelling real manifest targets vs toy/reference
     fixtures.
+22. **Set 3 (Phases 11-13): detection coverage expansion.**
+    (a) `sig-message-binding` extended in place (same relation id):
+    lengths around 256/512/1024/4096/65536, max message 65,537
+    bytes, max 1,024 altered verifications per algorithm; ToySig
+    gained `truncate_message_at` mutants at 4096/8192 for self-test
+    recall. (b) Manifests gained optional `validation` metadata
+    (FIPS 203 standard/format, ek/dk responsibility
+    validate-on-entry|prevalidated-input|unspecified, basis);
+    invalid metadata is a manifest error, omitted means
+    unspecified. New relations `kem-ek-rejects-noncanonical`
+    (<=32 probes) and `kem-dk-rejects-hash-mismatch` decline
+    NOT_ANSWERABLE without a validate-on-entry declaration; the
+    declaration is recorded as declared, never as proven.
+    PackedEkKem (toy) now returns explicit REJ for a dk hash
+    mismatch in its clean form (strict contract semantics);
+    `kem-dk-hash-consistency` and `kem-ek-modulus-canonical` are
+    unchanged. Registry 32 -> 34 relations; counts derive from the
+    registry. `manifests/noble.json` now declares validate-on-entry
+    for Noble. (c) Noble mutation kit in regressions/noble-mutations
+    imports the audit's 13 cases plus an 8192 truncation control and
+    two contract controls; mutations patch the pinned BUILT
+    JavaScript (hash- and anchor-count-pinned) because that is what
+    the adapter executes, rather than rebuilding TypeScript.
+    run_kit.py exits 2 on missing/mismatched prerequisites so the
+    new CI `noble-kit` job fails loudly; ordinary pqcheck runs keep
+    verdict semantics (NOT_REACHED). (d) Wheel packaging needed no
+    change: shipped manifest count is 8 (test updated), and the
+    shipped-manifests probe now only requires a conclusive run from
+    a harness binary runnable on the current platform (an ELF built
+    under WSL is not runnable from Windows).
+    (e) ToySig gained msg_truncates_at_4096 / msg_truncates_at_8192
+    mutants (planted-mutant total 41 -> 43; selftest liveness now
+    probes a 9,000-byte message so cutoff mutants are live), and the
+    shipped-manifests probe only demands a conclusive run from a
+    harness binary runnable on the current platform.
+23. **Set 3 follow-up corrections.** (a) Kit replay now validates
+    results, not exit codes: a replay counts only on exit 1 plus a
+    JSON report naming the filename's relation DEFECT_FOUND;
+    stdout/stderr are preserved beside each script; the exit-3
+    retry is removed (exit 3 is invalid invocation/manifest).
+    Generated reproducers now request `--json` (new reproduce flag).
+    (b) Kit acceptance requires consistent report/exit pairs:
+    defect cases need exit exactly 1 and validated replays; clean
+    and contract controls need zero findings and exit 0;
+    kem-reject-truncated-ct again expects both
+    kem-reject-binds-full-ciphertext and
+    kem-reject-ct-bit-contribution. (c) Manifest validation rejects
+    non-string ek/dk values (JSON arrays/objects) with ManifestError
+    instead of an unhandled TypeError. (d) sig-message-binding no
+    longer infers signing control from PINNED_RANDOMNESS (that
+    capability only proves seed-deterministic key generation; Noble
+    signing is hedged): signing determinism is observed by signing
+    one message twice under one key and reported as observed.

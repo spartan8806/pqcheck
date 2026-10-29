@@ -3,5 +3,12 @@
   "version": "0.6.1",
   "adapter": "noble",
   "node_cwd": "${NOBLE_DIR}",
-  "algorithms": ["falcon512", "falcon512padded", "ml-dsa-44", "ml-kem-768"]
+  "algorithms": ["falcon512", "falcon512padded", "ml-dsa-44", "ml-kem-768"],
+  "validation": {
+    "standard": "FIPS 203",
+    "key_format": "ML-KEM serialized keys",
+    "ek": "validate-on-entry",
+    "dk": "validate-on-entry",
+    "basis": "Noble encapsulate/decapsulate perform FIPS 203 Sections 7.2-7.3 input checking on entry (declared, not independently proven)"
+  }
 }

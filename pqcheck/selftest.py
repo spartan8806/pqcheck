@@ -115,6 +115,15 @@ def probe_behaviour(target):
                             mutated[pos // 8] ^= 1 << (pos % 8)
                             if target.verify(pk, msg, bytes(mutated)).ok:
                                 obs.append(("accepted-bitflip", pos))
+            # long-message liveness: truncation mutants only differ
+            # past their cutoff, so probe beyond 8192 bytes
+            long_msg = bytes((i * 7) % 256 for i in range(9000))
+            s_long = target.sign(sk, long_msg)
+            obs.append(_status_value(s_long))
+            if s_long.ok:
+                obs.append(_status_value(target.verify(pk, long_msg, s_long.value)))
+                altered = bytearray(long_msg); altered[8500] ^= 1
+                obs.append(_status_value(target.verify(pk, bytes(altered), s_long.value)))
             try:
                 s = target.sign(sk, b"ctx probe", ctx=b"a")
                 if s.ok:

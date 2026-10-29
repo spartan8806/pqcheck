@@ -2,10 +2,11 @@
 
     python -m pqcheck web [--port 8420]
 
-Defensive local use only: the server binds the loopback interface,
-exposes only whitelisted in-repository targets (clean toys, planted
-mutants, boundary fixtures, and the shipped python-reference
-manifest), and never opens arbitrary paths or commands.
+Defensive local use only: the server binds the loopback interface
+and is meant for the machine's own user. The default workflow opens
+local project folders / pqcheck manifests and runs them through the
+CLI's validated runner. Toy fixtures and mutants live in a separate
+Demo / Self-test area. Nothing here opens network or remote targets.
 """
 from __future__ import annotations
 
@@ -144,6 +145,172 @@ def run_named_manifest(name: str) -> dict:
     return result
 
 
+def _platform_label() -> str:
+    import platform
+    import sys
+
+    return (f"{sys.platform} / {platform.machine()} / "
+            f"Python {platform.python_version()}")
+
+
+def _manifest_identity(manifest, source: str) -> dict:
+    return {
+        "source": source,
+        "target": manifest.target,
+        "revision": manifest.version,
+        "adapter": manifest.adapter,
+        "algorithms": list(manifest.algorithms),
+        "platform": _platform_label(),
+    }
+
+
+def _readiness(manifest) -> tuple[list, list]:
+    """Readiness = the validated runner's provenance checks, explained
+    with exact next steps. Recognizing a target is never readiness."""
+    from pqcheck.cli import _manifest_problems
+    from pqcheck.manifest import ADAPTER_SPECS
+
+    problems = list(_manifest_problems(manifest))
+    steps = []
+    if manifest.adapter not in ADAPTER_SPECS:
+        problems.append(f"unsupported adapter {manifest.adapter!r}")
+        steps.append("Use a supported adapter (c, exec, noble, python, "
+                     "codec, hint); see the Adapters tab for the wire formats.")
+    for problem in problems:
+        if "harness not found" in problem:
+            steps.append(
+                f"Build the harness first: {problem.split(': ', 1)[-1]}. "
+                "Harness sources and build notes live in pqcheck/adapters/ "
+                "(C templates), pqcheck/adapters/rust/ (Rust), and "
+                "regressions/enc_rust/README.md (enc_rust). Then re-check.")
+        elif "node_cwd not found" in problem:
+            steps.append(
+                "Install the Node target (npm install @noble/post-quantum) "
+                "or fix node_cwd in the manifest to the install folder.")
+        elif "version" in problem:
+            steps.append(
+                "Fix the pinned version in the manifest to match the "
+                "installed target, or install the pinned revision. "
+                "pqcheck will not relabel one build as another.")
+        elif "module file not found" in problem:
+            steps.append("Point the manifest's module at the target's "
+                         "Python module file, or fix the path.")
+    if not problems:
+        steps.append("Ready. Run checks when you are ready.")
+    return problems, steps
+
+
+def inspect_project(path_str: str) -> dict:
+    """Step 1–3 of the project workflow: open, identify, readiness."""
+    from pathlib import Path
+
+    from pqcheck.manifest import Manifest, ManifestError
+
+    raw = str(path_str or "").strip()
+    result = {"input": raw, "platform": _platform_label(), "found": False,
+              "ready": False, "problems": [], "next_steps": [],
+              "candidates": []}
+    if not raw:
+        result["problems"] = ["no project folder or manifest path given"]
+        result["next_steps"] = ["Enter a local project folder or a "
+                                "pqcheck manifest (.json) path."]
+        return result
+    path = Path(raw).expanduser()
+    if not path.exists():
+        result["problems"] = [f"path does not exist: {path}"]
+        result["next_steps"] = ["Check the path. pqcheck only opens "
+                                "local folders and manifest files."]
+        return result
+    result["found"] = True
+    if path.is_dir():
+        from pqcheck.discover import discover
+
+        candidates = discover(path)
+        result["candidates"] = [{
+            "kind": c.kind, "path": str(c.path), "ready": c.ready,
+            "detail": c.detail, "missing": list(c.missing),
+            "algorithms": list(c.algorithms),
+        } for c in candidates]
+        named = [c for c in candidates if c.kind == "manifest" and c.manifest]
+        if named:
+            manifest = named[0].manifest
+            result.update(_manifest_identity(manifest, str(named[0].path)))
+            problems, steps = _readiness(manifest)
+            result["ready"] = not problems
+            result["problems"] = problems
+            result["next_steps"] = steps
+            return result
+        result["problems"] = [
+            "no pqcheck manifest found in this folder; recognized files "
+            "do not by themselves make a target testable"]
+        result["next_steps"] = [
+            "Create a manifest naming target, pinned version, adapter, "
+            "and algorithms (see manifests/ for examples), or open an "
+            "existing manifest file directly."]
+        return result
+    try:
+        manifest = Manifest.load(path)
+    except (ManifestError, OSError, ValueError) as exc:
+        result["problems"] = [f"unsupported project file: {exc}"]
+        result["next_steps"] = ["Open a pqcheck manifest (.json) or a "
+                                "project folder containing one."]
+        return result
+    result.update(_manifest_identity(manifest, str(path)))
+    problems, steps = _readiness(manifest)
+    result["ready"] = not problems
+    result["problems"] = problems
+    result["next_steps"] = steps
+    return result
+
+
+def run_project(path_str: str) -> dict:
+    """Steps 4–6: run through the validated runner; return the report
+    plus exportable artifacts (text / HTML / JSON / reproduction)."""
+    from pqcheck.cli import _manifest_for_path, _report_json, run_manifest_validated
+
+    manifest, source = _project_manifest(path_str)
+    report = run_manifest_validated(
+        manifest, list(manifest.algorithms or [None]), sorted(REGISTRY))
+    result = _report_dict(report, source)
+    result.update(_manifest_identity(manifest, source))
+    result["kind"] = "real project target"
+    reproduction = [f"# Reproduction for {manifest.target} @ {manifest.version}",
+                    f"Manifest: {source}", ""]
+    for claim in report.defects():
+        alg = f" --algorithm {claim.subject.algorithm}" if claim.subject.algorithm else ""
+        reproduction.append(
+            f"python -m pqcheck reproduce \"{source}\" "
+            f"--relation {claim.method.name}{alg}")
+    if not report.defects():
+        reproduction.append(
+            f"python -m pqcheck run \"{source}\"   # full re-run")
+    result["exports"] = {
+        "text": report.to_text(),
+        "html": report.to_html(),
+        "json": __import__("json").dumps(_report_json(report), indent=2),
+        "reproduction": "\n".join(reproduction) + "\n",
+    }
+    return result
+
+
+def _project_manifest(path_str: str):
+    from pathlib import Path
+
+    from pqcheck.cli import _manifest_for_path
+
+    raw = str(path_str or "").strip()
+    path = Path(raw).expanduser()
+    if path.is_dir():
+        from pqcheck.discover import discover
+
+        named = [c for c in discover(path)
+                 if c.kind == "manifest" and c.manifest is not None]
+        if named:
+            return named[0].manifest, str(named[0].path)
+    manifest = _manifest_for_path(raw, [])
+    return manifest, str(path)
+
+
 def _make_target(spec: str):
     """Return (target, display_name) for a whitelisted spec id."""
     kind, _, rest = spec.partition(":")
@@ -167,10 +334,23 @@ def _make_target(spec: str):
     raise ValueError(f"unknown target spec {spec!r}")
 
 
+READER_VERDICTS = {
+    "DEFECT_FOUND": "Finding — defect found",
+    "NO_DEFECT_FOUND": "Check completed — no defect found",
+    "INCONCLUSIVE": "Inconclusive — witness search found nothing (not a pass)",
+    "NOT_REACHED": "Not run — nothing was established",
+    "NOT_ANSWERABLE": "Not answerable for this target",
+}
+
+
 def _claim_dict(claim) -> dict:
     relation = REGISTRY.get(claim.method.name)
     cov = claim.coverage
     return {
+        "reader_verdict": READER_VERDICTS[
+            "INCONCLUSIVE" if (claim.verdict is Verdict.NO_DEFECT_FOUND
+                                and claim.one_sided)
+            else claim.verdict.value],
         "subject": str(claim.subject),
         "target": claim.subject.target,
         "commit": claim.subject.commit,
@@ -196,7 +376,7 @@ def _claim_dict(claim) -> dict:
 
 
 def run_target(spec: str) -> dict:
-    """Run all 32 relations against one whitelisted target."""
+    """Run all relations against one whitelisted target."""
     if spec == "manifest:python-reference":
         return _run_manifest()
     target, name = _make_target(spec)
@@ -331,15 +511,104 @@ section{border:1px solid #2c2f36;border-radius:6px;padding:.8em 1em;margin:.7em 
 <h1>pqcheck Assurance Workbench</h1>
 <p class="meta">Local only (127.0.0.1). No score is computed, ever.</p>
 <nav>
-<button data-tab="runner" class="active">Live Target Runner</button>
-<button data-tab="catalogue">32-Relation Catalogue</button>
+<button data-tab="project" class="active">Project</button>
+<button data-tab="reports">Shipped Manifest Reports</button>
+<button data-tab="catalogue">Relation Catalogue</button>
 <button data-tab="backtest">Historical Backtest Matrix</button>
 <button data-tab="adapters">Multi-Language Adapters</button>
-<button data-tab="reports">Generated Reports</button>
+<button data-tab="demo">Demo / Self-test</button>
+<button data-tab="about">About</button>
 </nav>
 
-<div id="tab-runner">
-<p><select id="target"></select> <button id="run">Run all 32 relations</button></p>
+<div id="tab-project">
+<h2>Check a real project</h2>
+<p class="meta">1. Open a local project folder or an existing pqcheck manifest.
+2. We identify the target and check readiness before anything runs.
+3. Checks run through the same validated runner as the CLI.
+Recognizing source files does not mean we can test them.</p>
+<p><input id="projpath" type="text" size="72" placeholder="C:\path\to\project  or  C:\path\to\manifest.json">
+<button id="inspect">Open &amp; check readiness</button></p>
+<p class="meta">New here? Open the sample project <code>examples/vulnerable-kem</code> —
+it has a planted defect, so you can watch a finding happen on purpose.</p>
+<div id="identity"></div>
+<p><button id="runproj" disabled>Run checks</button>
+<button id="exptext" disabled>Export report (.txt)</button>
+<button id="exphtml" disabled>Export report (.html)</button>
+<button id="expjson" disabled>Export report (.json)</button>
+<button id="exprepro" disabled>Export reproduction instructions</button></p>
+<p id="projsummary" class="meta"></p>
+<div id="projreport"></div>
+</div>
+
+<div id="tab-about" class="hidden">
+<h2>How pqcheck works, and why</h2>
+
+<section><h3>Why this exists</h3>
+<p>Post-quantum implementations fail quietly: a missing re-encryption check, a
+non-canonical encoding, a hint index accepted out of order — the code still
+round-trips, still passes its own tests, and is still broken. pqcheck exists to
+look for exactly those quiet failures in code you are about to trust.</p></section>
+
+<section><h3>How it works</h3>
+<p><b>1. A manifest names the target.</b> A small JSON file pins the target, its
+exact revision, an adapter, and its algorithms. pqcheck opens nothing else —
+no network targets, no scanning.</p>
+<p><b>2. An adapter speaks to the real implementation.</b> Harnesses forward
+bytes into the actual library (C, Rust, Node/Noble, Python, or any program
+speaking the line protocol). pqcheck never grades a reimplementation of your
+code — including its own.</p>
+<p><b>3. Relations ask questions with witnesses.</b> Each of the 34 relations
+states one property ("no corrupted ciphertext decapsulates to the honest
+secret") and probes the target for a counterexample. A finding always comes
+with a witness: the concrete bytes that misbehaved.</p>
+<p><b>4. Verdicts are gated.</b> A claim of "no defect" must have earned it:
+real coverage observed by the runner, and for witness searches, a live control
+proving the probe could have fired. Claims that cannot meet the gate are
+refused or downgraded at construction time.</p></section>
+
+<section><h3>How to read results</h3>
+<table><thead><tr><th>What you see</th><th>Technical verdict</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Finding — defect found</td><td><code>DEFECT_FOUND</code></td><td>A witness misbehaved. Reproduce it, then fix the code.</td></tr>
+<tr><td>Check completed — no defect found</td><td><code>NO_DEFECT_FOUND</code></td><td>The check ran both directions and found nothing, within its stated ceiling.</td></tr>
+<tr><td>Inconclusive — witness search found nothing</td><td><code>NO_DEFECT_FOUND</code> (one-sided)</td><td>A search that finds nothing proves nothing. Never a pass.</td></tr>
+<tr><td>Not run — nothing was established</td><td><code>NOT_REACHED</code></td><td>The target could not be opened or the check did not execute.</td></tr>
+<tr><td>Not answerable for this target</td><td><code>NOT_ANSWERABLE</code></td><td>The question does not apply to this interface, or the adapter cannot express it.</td></tr>
+</tbody></table>
+<p>There is <b>no score and no percentage</b>. Dividing passed checks by total
+checks measures how much tool you ran, not how safe the code is. One finding
+outweighs any number of quiet checks.</p></section>
+
+<section><h3>Readiness before running</h3>
+<p>Opening a project first identifies the target and checks provenance: the
+manifest's pinned revision, the harness actually present, the version the
+binary reports about itself. A mismatch stops the run with an explanation
+instead of relabeling one build as another. Recognizing source files in a
+folder is discovery only — it never means the code can be tested.</p></section>
+
+<section><h3>What pqcheck cannot establish</h3>
+<p>It does not prove implementations correct, constant-time, or memory-safe.
+It does not audit stateful signature schemes, streaming/hash boundary
+behaviour, or sampler mathematics. Every claim in a report carries its own
+"does not establish" line — read those before quoting a result. Historical
+defects the relations miss are listed openly in the Backtest tab's work queue
+rather than smoothed over.</p></section>
+
+<section><h3>Safety posture</h3>
+<p>pqcheck is a defensive checker for your own code. It runs locally
+(127.0.0.1 only), works from local manifests, refuses secret-shaped material
+in its reports so findings are safe to paste into bug trackers, and produces
+no key material, forgeries, or exploit output. The Demo / Self-test tab holds
+the toy fixtures and planted mutants used to validate pqcheck itself; the
+folder <code>examples/vulnerable-kem</code> is a sample project with a planted
+defect so you can watch a finding happen on purpose.</p></section>
+</div>
+
+<div id="tab-demo" class="hidden">
+<h2>Demo / Self-test</h2>
+<p class="meta">Toy fixtures, planted mutants, and boundary cases for demonstrating
+and self-testing pqcheck itself. Nothing here is a real project target.</p>
+<p><select id="target"></select> <button id="run">Run all relations</button></p>
 <p id="summary" class="meta"></p>
 <div id="report"></div>
 </div>
@@ -376,7 +645,7 @@ const $=id=>document.getElementById(id);
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
  b.classList.add("active");
- ["runner","catalogue","backtest","adapters","reports"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));
+ ["project","reports","catalogue","backtest","adapters","demo","about"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));
 }));
 function esc(s){const d=document.createElement("div");d.textContent=String(s??"");return d.innerHTML}
 async function loadTargets(){
@@ -400,13 +669,55 @@ $("runmanifest").addEventListener("click",async()=>{
  if(r.error){$("mfsummary").textContent="not established: "+r.error;$("mfreport").innerHTML="";return}
  $("mfsummary").textContent=`${r.target} @ revision ${r.revision} [${r.kind||"manifest target"}] | `+
   Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
- const order=["DEFECT_FOUND","NOT_REACHED","NO_WITNESS_ESTABLISHES_NOTHING","NO_DEFECT_FOUND","NOT_ANSWERABLE"];
- $("mfreport").innerHTML=order.map(b=>`<h3>${b} (${r.buckets[b].length})</h3>`+(r.buckets[b].map(claimHtml).join("")||'<p class="meta">none</p>')).join("")+
-  `<h3>Coverage gaps (${(r.gaps||[]).length}) — not clean, not counted above as success</h3>`+
-  ((r.gaps||[]).map(claimHtml).join("")||'<p class="meta">none</p>');
+ $("mfreport").innerHTML=renderBuckets(r);
 });
+let lastProject=null;
+function download(name, text, type){
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([text],{type:type||"text/plain"}));
+ a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+$("inspect").addEventListener("click",async()=>{
+ $("identity").innerHTML="checking...";$("runproj").disabled=true;
+ const r=await (await fetch("/api/project/inspect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:$("projpath").value})})).json();
+ if(r.error){$("identity").innerHTML=`<section><p>could not open: ${esc(r.error)}</p></section>`;return}
+ const id=r.target?`<p><b>Target:</b> ${esc(r.target)} &nbsp; <b>Revision:</b> <code>${esc(r.revision)}</code><br>
+  <b>Adapter:</b> ${esc(r.adapter)} &nbsp; <b>Algorithms:</b> ${esc((r.algorithms||[]).join(", ")||"(none)")}<br>
+  <b>Platform:</b> ${esc(r.platform)} &nbsp; <b>Source:</b> <code>${esc(r.source||r.input)}</code></p>`:
+  `<p class="meta">No testable target identified in <code>${esc(r.input)}</code>.</p>`;
+ const probs=(r.problems||[]).map(p=>`<li>${esc(p)}</li>`).join("");
+ const steps=(r.next_steps||[]).map(s=>`<li>${esc(s)}</li>`).join("");
+ const cands=(r.candidates||[]).map(c=>`<li><code>${esc(c.path)}</code> [${esc(c.kind)}]${c.ready?"":" — not ready"}</li>`).join("");
+ $("identity").innerHTML=`<section>${id}
+  <p><b>Readiness:</b> ${r.ready?'<span class="badge">ready</span>':'<span class="badge">not ready — nothing has run yet</span>'}</p>
+  ${probs?`<p><b>What is missing:</b></p><ul>${probs}</ul>`:""}
+  ${steps?`<p><b>Exact next step:</b></p><ul>${steps}</ul>`:""}
+  ${cands?`<p class="meta"><b>Recognized in this folder</b> (recognition is not testability):</p><ul>${cands}</ul>`:""}</section>`;
+ $("runproj").disabled=!r.ready;
+});
+$("runproj").addEventListener("click",async()=>{
+ $("projsummary").textContent="running checks through the validated runner...";$("projreport").innerHTML="";
+ const r=await (await fetch("/api/project/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:$("projpath").value})})).json();
+ if(r.error){$("projsummary").textContent="not established: "+r.error;return}
+ lastProject=r;
+ $("projsummary").textContent=`${r.target} @ revision ${r.revision} | adapter ${r.adapter} | ${r.platform} | `+
+  Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
+ $("projreport").innerHTML=renderBuckets(r);
+ ["exptext","exphtml","expjson","exprepro"].forEach(i=>$(i).disabled=false);
+});
+$("exptext").addEventListener("click",()=>lastProject&&download("pqcheck-report.txt",lastProject.exports.text));
+$("exphtml").addEventListener("click",()=>lastProject&&download("pqcheck-report.html",lastProject.exports.html,"text/html"));
+$("expjson").addEventListener("click",()=>lastProject&&download("pqcheck-report.json",lastProject.exports.json,"application/json"));
+$("exprepro").addEventListener("click",()=>lastProject&&download("pqcheck-reproduction.md",lastProject.exports.reproduction));
+const HEADINGS={DEFECT_FOUND:"Findings",NO_DEFECT_FOUND:"Completed checks — no defect found",NO_WITNESS_ESTABLISHES_NOTHING:"Inconclusive — witness search found nothing (not a pass)",NOT_REACHED:"Not run — nothing was established",NOT_ANSWERABLE:"Not answerable for this target"};
+function renderBuckets(r){
+ const order=["DEFECT_FOUND","NO_DEFECT_FOUND","NO_WITNESS_ESTABLISHES_NOTHING","NOT_REACHED","NOT_ANSWERABLE"];
+ return order.map(b=>`<h3>${HEADINGS[b]} (${r.buckets[b].length}) <span class="meta">[${b}]</span></h3>`+(r.buckets[b].map(claimHtml).join("")||'<p class="meta">none</p>')).join("")+
+  `<h3>Coverage gaps (${(r.gaps||[]).length}) — checks that did not run or cannot be answered; never counted as success</h3>`+
+  ((r.gaps||[]).map(claimHtml).join("")||'<p class="meta">none</p>');
+}
 function claimHtml(c){
- return `<section><p><span class="badge">${esc(c.verdict)}</span> <code>${esc(c.subject)}</code></p>
+ return `<section><p><span class="badge">${esc(c.reader_verdict||c.verdict)}</span> <span class="meta">[technical verdict: ${esc(c.verdict)}]</span> <code>${esc(c.subject)}</code></p>
  <p>${esc(c.property)}</p>
  <p class="meta">method ${esc(c.method)} | oracle ${esc(c.oracle||"none")} | units ${c.coverage.units} | exercised ${esc(c.coverage.exercised)} | runner ${esc(c.coverage.observed)}</p>
  ${c.evidence?`<p>evidence: ${esc(c.evidence)}</p>`:""}
@@ -419,8 +730,7 @@ $("run").addEventListener("click",async()=>{
  const r=await (await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:$("target").value})})).json();
  if(r.error){$("summary").textContent="error: "+r.error;return}
  $("summary").textContent=Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
- const order=["DEFECT_FOUND","NOT_REACHED","NO_WITNESS_ESTABLISHES_NOTHING","NO_DEFECT_FOUND","NOT_ANSWERABLE"];
- $("report").innerHTML=order.map(b=>`<h3>${b} (${r.buckets[b].length})</h3>`+(r.buckets[b].map(claimHtml).join("")||'<p class="meta">none</p>')).join("");
+ $("report").innerHTML=renderBuckets(r);
 });
 async function loadRelations(){
  const q=$("q").value,f=$("fclass").value;
@@ -495,13 +805,18 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/run", "/api/run-manifest"):
+        if parsed.path not in ("/api/run", "/api/run-manifest",
+                               "/api/project/inspect", "/api/project/run"):
             return self._json({"error": "not found"}, 404)
         try:
             length = int(self.headers.get("Content-Length") or 0)
             if length > 65536:
                 return self._json({"error": "request too large"}, 413)
             payload = json.loads(self.rfile.read(length) or b"{}")
+            if parsed.path == "/api/project/inspect":
+                return self._json(inspect_project(str(payload.get("path", ""))))
+            if parsed.path == "/api/project/run":
+                return self._json(run_project(str(payload.get("path", ""))))
             if parsed.path == "/api/run-manifest":
                 return self._json(run_named_manifest(str(payload.get("name", ""))))
             spec = str(payload.get("target", ""))

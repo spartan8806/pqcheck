@@ -1,4 +1,4 @@
-# 01 — Specification of the 32 relations
+# 01 — Specification of the 34 relations
 
 Code: [pqcheck/relations/](../pqcheck/relations/) — registry in
 [pqcheck/relations/base.py](../pqcheck/relations/base.py), shared
@@ -33,7 +33,9 @@ List them live with `python -m pqcheck relations`.
 | `kem-declared-length-bit-exclusion` | decaps/encaps do not depend on 64 guard bytes past the buffer | kem, guard_fill | memory safety beyond the guarded inputs |
 | `kem-degenerate-ciphertext` | degenerate ciphertexts reject deterministically, distinctly, never to the honest secret | kem | all malformed ciphertext classes |
 | `kem-dk-hash-consistency` | tampered `H(ek)` inside `dk` never yields the honest secret (constructs_probes) | kem | full FIPS 203 Algorithm 16 key format beyond `H(ek)` |
+| `kem-dk-rejects-hash-mismatch` | a `validate-on-entry` decapsulation entry point rejects a `dk` whose stored `H(ek)` is altered (constructs_probes; Set 3) | kem, declared `validation.dk=validate-on-entry` | key validation under `prevalidated-input`/`unspecified` contracts (declines) |
 | `kem-ek-modulus-canonical` | `ek` coefficients in [q, 4095] are never key-equivalent to the canonical `ek` (constructs_probes) | kem | that encaps validates/rejects non-canonical input (only key-equivalence is a defect) |
+| `kem-ek-rejects-noncanonical` | a `validate-on-entry` encapsulation entry point rejects `ek` coefficients equal to q or 4095 (≤32 probes; constructs_probes; Set 3) | kem, declared `validation.ek=validate-on-entry` | key validation under `prevalidated-input`/`unspecified` contracts (declines) |
 | `kem-fo-liveness` | no corrupted ciphertext decapsulates to the honest secret (one-sided) | kem | FO correctness when no witness is found |
 | `kem-reject-binds-full-ciphertext` | implicit-rejection secret binds every ciphertext byte | kem | FO security beyond binding |
 | `kem-reject-binds-z-accept-path-does-not` | implicit rejection binds the key's `z`; accept path does not leak it | kem | key-independence of the honest path |
@@ -50,7 +52,7 @@ List them live with `python -m pqcheck relations`.
 | `sig-encoding-length-exact` | codec rejects any stream length ≠ exact | raw_decode | variable-length codecs (declines) |
 | `sig-encoding-pad-bits-zero` | padding bits after the stream must be zero | raw_decode | canonicality inside the stream |
 | `sig-encoding-signed-zero` | codec rejects a signed-zero (−0) stream (constructs_probes) | raw_decode | canonicality of non-zero coefficients |
-| `sig-message-binding` | a signature binds the exact message bytes and length | sig | context/mode binding |
+| `sig-message-binding` | a signature binds the exact message bytes and length (short probes plus lengths around 256/512/1024/4096/65536, ≤65,537 bytes, ≤1,024 altered verifications per algorithm; Set 3) | sig | context/mode binding; binding for untested lengths/edit classes |
 | `sig-mode-domain-separation` | prehash and direct modes do not cross-verify | sig | correctness of the prehash function |
 | `sig-unread-bits` | every signature bit is read by verify | sig | strong unforgeability |
 | `sig-verify-length-exact` | verify rejects any signature length ≠ fixed length | sig, detached_sig, explicit_sig_length | variable-length schemes (declines) |

@@ -84,6 +84,36 @@ class Manifest:
             raise ManifestError("manifest field 'node_cwd' must be a string path")
         self.kind = data.get("kind")
         self.oracle = data.get("oracle")
+        # --- explicit API validation contract (Set 3, Phase 12) -----
+        # FIPS 203 permits key checking earlier in a workflow, so who
+        # validates raw serialized keys must be declared, not assumed.
+        validation = data.get("validation")
+        if validation is None:
+            self.validation = {
+                "standard": None, "key_format": None,
+                "ek": "unspecified", "dk": "unspecified", "basis": None,
+            }
+        else:
+            if not isinstance(validation, dict):
+                raise ManifestError("manifest field 'validation' must be an object")
+            allowed = {"validate-on-entry", "prevalidated-input", "unspecified"}
+            parsed = {"standard": None, "key_format": None,
+                      "ek": "unspecified", "dk": "unspecified", "basis": None}
+            for key in ("ek", "dk"):
+                value = validation.get(key, "unspecified")
+                if not isinstance(value, str) or value not in allowed:
+                    raise ManifestError(
+                        f"validation.{key} must be one of {sorted(allowed)}, got {value!r}")
+                parsed[key] = value
+            for key in ("standard", "key_format", "basis"):
+                value = validation.get(key)
+                if value is not None and not (isinstance(value, str) and value.strip()):
+                    raise ManifestError(f"validation.{key} must be a non-empty string")
+                parsed[key] = value
+            unknown = set(validation) - {"standard", "key_format", "ek", "dk", "basis"}
+            if unknown:
+                raise ManifestError(f"unknown validation field(s): {sorted(unknown)}")
+            self.validation = parsed
         module = data.get("module")
         if "module" in spec["required"] and not (isinstance(module, str) and module.strip()):
             raise ManifestError("adapter 'python' requires manifest field 'module' (dotted name or file path)")

@@ -133,6 +133,148 @@ class EkModulusCanonical(KemRelation):
         return Finding(True, "no non-canonical ek coefficient is key-equivalent to the canonical ek" + note, units, "ek modulus canonicality probes across all polynomials")
 
 
+def _contract(target, key):
+    contract = getattr(target, "api_contract", None) or {}
+    return contract.get(key, "unspecified")
+
+
+@register
+class EkRejectsNoncanonical(KemRelation):
+    id = "kem-ek-rejects-noncanonical"
+    property = ("an encapsulation entry point responsible for validating "
+                "raw ML-KEM public keys rejects out-of-range encoded coefficients")
+    ceiling = ("covers the declared validate-on-entry contract and the "
+               "probed coefficient positions only; a prevalidated-input "
+               "API is not accused by this check")
+    constructs_probes = True
+
+    def probe_control(self, target):
+        packing = getattr(target, "ek_packing", None)
+        if not packing:
+            return False
+        kg = pair(target.keygen(b"pqcheck-ek-reject-control"))
+        if kg is None:
+            return False
+        ek, _dk = kg
+        count = packing["n"] * packing["k"]
+        packed_len = count * 12 // 8
+        if len(ek) < packed_len:
+            return False
+        body, _rho = _split_ek(ek, packed_len)
+        if _pack12(_unpack12(body)) != body:
+            return False
+        return pair(target.encaps(ek)) is not None
+
+    def check(self, target, rng):
+        if _contract(target, "ek") != "validate-on-entry":
+            raise NotApplicable(
+                "missing premise: no declared validate-on-entry contract "
+                "for encapsulation keys (FIPS 203 permits checking "
+                "earlier in a workflow)")
+        packing = getattr(target, "ek_packing", None)
+        if not packing:
+            raise NotApplicable("target does not declare 12-bit ek packing")
+        q = packing["q"]; n = packing["n"]; k = packing["k"]
+        count = n * k
+        contract_note = ("declared contract: ek=validate-on-entry "
+                         "(declared in the manifest, not independently proven)")
+        kg = pair(target.keygen(rng.randbytes(16)))
+        if kg is None:
+            return Finding(None, "keygen failed", 0, "ek strict validation", notes=contract_note)
+        ek, dk = kg
+        packed_len = count * 12 // 8
+        body, trailing = _split_ek(ek, packed_len)
+        coeffs = _unpack12(body, count)
+        enc = pair(target.encaps(ek))
+        if enc is None or not ok(target.decaps(dk, enc[1])):
+            return Finding(None, "baseline encaps/decaps failed", 0, "ek strict validation", notes=contract_note)
+        positions = []
+        for poly in range(k):
+            base = poly * n
+            positions += [base, base + 1, base + n // 2, base + n - 1]
+        probes = []  # (position, value)
+        for pos in positions:
+            for value in (q, 4095):
+                if coeffs[pos] != value:
+                    probes.append((pos, value))
+        probes = probes[:32]
+        units = 0
+        accepted = []
+        for pos, value in probes:
+            mutated = list(coeffs); mutated[pos] = value
+            bad_ek = _pack12(mutated) + trailing
+            out = target.encaps(bad_ek)
+            units += 1
+            if ok(out):
+                accepted.append((pos, value))
+            elif out.status.name not in ("REJECTED",):
+                return Finding(None, f"transport outcome {out.status} on a malformed ek is not a target rejection", units, "ek strict validation probes", notes=contract_note)
+        if accepted:
+            pos, value = accepted[0]
+            return Finding(False, f"encaps accepted a non-canonical ek: coefficient at position {pos} set to {value} (q={q}, ML-KEM-{ {2: 512, 3: 768, 4: 1024}[k] }); {len(accepted)}/{units} malformed keys accepted under the declared validate-on-entry contract", units, "ek strict validation probes (begin/middle/end of every polynomial)", reproduce="re-run pqcheck kem-ek-rejects-noncanonical with the pinned seed", notes=contract_note)
+        return Finding(True, f"all {units} non-canonical ek probes (coefficients q and 4095 near begin/middle/end of every polynomial) were explicitly rejected", units, "ek strict validation probes", notes=contract_note)
+
+
+@register
+class DkRejectsHashMismatch(KemRelation):
+    id = "kem-dk-rejects-hash-mismatch"
+    property = ("a decapsulation entry point responsible for validating "
+                "raw ML-KEM secret keys rejects a mismatched stored public-key hash")
+    ceiling = ("covers the declared validate-on-entry contract and the "
+               "probed hash-field changes only; a prevalidated-input API "
+               "is not accused by this check")
+    constructs_probes = True
+
+    def probe_control(self, target):
+        kg = pair(target.keygen(b"pqcheck-dk-reject-control"))
+        if kg is None:
+            return False
+        ek, dk = kg
+        parts = _dk_parts(target, dk)
+        if parts is None:
+            return False
+        _prefix, embedded, h, _z = parts
+        return embedded == ek and h == sha3(ek)
+
+    def check(self, target, rng):
+        if _contract(target, "dk") != "validate-on-entry":
+            raise NotApplicable(
+                "missing premise: no declared validate-on-entry contract "
+                "for decapsulation keys (FIPS 203 permits checking "
+                "earlier in a workflow)")
+        contract_note = ("declared contract: dk=validate-on-entry "
+                         "(declared in the manifest, not independently proven)")
+        kg = pair(target.keygen(rng.randbytes(16)))
+        if kg is None:
+            return Finding(None, "keygen failed", 0, "dk strict validation", notes=contract_note)
+        ek, dk = kg
+        parts = _dk_parts(target, dk)
+        if parts is None:
+            raise NotApplicable("dk layout does not expose ek/H(ek)/z fields")
+        prefix, embedded, h, z = parts
+        enc = pair(target.encaps(ek))
+        if enc is None:
+            return Finding(None, "encaps failed", 0, "dk strict validation", notes=contract_note)
+        ss, ct = enc
+        if not ok(target.decaps(dk, ct)):
+            return Finding(None, "baseline decaps failed", 0, "dk strict validation", notes=contract_note)
+        tampered = [("hash-begin", flip(h, 0, 1)), ("hash-middle", flip(h, 16, 8)),
+                    ("hash-end", flip(h, 31, 128)), ("hash-all-zero", b"\x00" * 32),
+                    ("hash-all-ones", b"\xff" * 32)]
+        units = 0
+        accepted = []
+        for label, th in tampered:
+            out = target.decaps(prefix + embedded + th + z, ct)
+            units += 1
+            if ok(out):
+                accepted.append(label)
+            elif out.status.name not in ("REJECTED",):
+                return Finding(None, f"transport outcome {out.status} on a hash-mismatched dk is not a target rejection", units, "dk strict validation probes", notes=contract_note)
+        if accepted:
+            return Finding(False, f"decaps returned an ordinary shared secret for a dk with a mismatched stored H(ek) ({accepted[0]}; {len(accepted)}/{units} malformed keys accepted) under the declared validate-on-entry contract", units, "dk H(ek) strict validation probes (begin/middle/end, all-zero, all-ones)", reproduce="re-run pqcheck kem-dk-rejects-hash-mismatch with the pinned seed", notes=contract_note)
+        return Finding(True, f"all {units} hash-mismatched dk probes were explicitly rejected", units, "dk H(ek) strict validation probes", notes=contract_note)
+
+
 @register
 class DkHashConsistency(KemRelation):
     id = "kem-dk-hash-consistency"

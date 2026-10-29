@@ -32,7 +32,7 @@ Three layers, all must be green before any recall number is read:
 
 ## Recall: every mutant caught, every relation firing
 
-The 41 planted mutants are the canonical Appendix A keys:
+The 43 planted mutants are the canonical Appendix A keys:
 
 | Group | Count | Target |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ For every mutant, selftest requires both:
 - **Recall**: at least one relation returns `DEFECT_FOUND`.
 
 And globally: every one of the 32 relations must fire on at least
-one mutant (`relations with recall: 32/32`).
+one mutant (`relations with recall: 34/34`).
 
 ## Seed discipline
 
