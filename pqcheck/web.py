@@ -779,7 +779,7 @@ function claimHtml(c){
 $("runmuse").addEventListener("click",async()=>{
  $("museout").textContent="running...";$("musereceipt").textContent="";
  const r=await (await fetch("/api/muse-demo")).json();
- $("museout").textContent=(r.lines||[]).join("\n");
+ $("museout").textContent=(r.lines||[]).join("\\n");
  const x=r.receipt||{};
  $("musereceipt").textContent=`Token Savings receipt: mode ${x.mode} | core calls executed ${x.core_calls_executed} | estimated tokens saved ${x.estimated_tokens_saved} | candidates proposed ${x.candidates_proposed}, rejected by clean control ${x.candidates_rejected_by_clean_control}, verified ${x.candidates_verified} | ephemeral temp dirs created ${x.ephemeral_temp_dirs_created}, wiped ${x.ephemeral_temp_dirs_wiped} (100% wiped, 0 wild PoCs on disk)`;
 });

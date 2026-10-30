@@ -81,6 +81,15 @@ class WebDataTests(unittest.TestCase):
         self.assertEqual(reference["revision"], "0.1.0b1")
         self.assertIn("gaps", reference)
 
+    def test_page_script_has_no_broken_js_string(self):
+        # A literal newline inside a JS string kills the whole page
+        # script (every button dead). The muse output join must reach
+        # the browser as an escaped \n, not a raw line break.
+        import re
+        script = re.search(r"<script>(.*?)</script>", web.PAGE, re.S).group(1)
+        self.assertIn('join("\\n")', script)
+        self.assertNotIn('join("\n")', script)
+
     def test_project_workflow_is_the_real_default(self):
         import tempfile
         from pathlib import Path
