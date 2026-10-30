@@ -3,7 +3,7 @@
 Recorded under the rule: if building to spec requires breaking form from
 the prompts, write a doc and say so. Everything below is a case where the
 implementation differs from, or could not be verified against,
-[BUILD_PROMPTS.md](BUILD_PROMPTS.md) / [SPEC_FROM_SCRATCH.md](SPEC_FROM_SCRATCH.md).
+BUILD_PROMPTS.md / [SPEC_FROM_SCRATCH.md](SPEC_FROM_SCRATCH.md). (The build-prompt files were removed from the public repository by owner decision before publication and are kept locally only; this record is the public account of where the implementation broke form from them.)
 
 1. **Missing `CORE_PROMPT.txt`.** Phase 1 of BUILD_PROMPTS.md references
    `CORE_PROMPT.txt`, which was not in the folder. `pqcheck/verdict.py` was
