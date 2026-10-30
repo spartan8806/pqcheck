@@ -100,6 +100,18 @@ class McpTests(unittest.TestCase):
                                              "arguments": {}}})
         self.assertIn("error", bad)
 
+    def test_run_fixture_tool_call_returns_report(self):
+        from pqcheck import mcp_server
+        resp = mcp_server._handle({"method": "tools/call", "id": 3,
+                                  "params": {"name": "pqcheck.run_fixture",
+                                             "arguments": {"spec": "clean:ToyKem"}}})
+        self.assertIn("result", resp, resp)
+        result = resp["result"]["structuredContent"]
+        self.assertEqual(result["spec"], "clean:ToyKem")
+        self.assertIn("counts", result)
+        self.assertTrue(any(n > 0 for n in result["counts"].values()),
+                        result["counts"])
+
 
 class WebAuthTests(unittest.TestCase):
     def test_post_authorization(self):
@@ -113,6 +125,56 @@ class WebAuthTests(unittest.TestCase):
         handler.headers = {"Host": "127.0.0.1:8420", "X-PQCheck-Token": token,
                            "Origin": "http://evil.example"}
         self.assertFalse(handler._authorized())
+
+    def test_host_is_exact_match_not_prefix(self):
+        from types import SimpleNamespace
+
+        from pqcheck import web
+        token = web.session_token()
+        server = SimpleNamespace(server_address=("127.0.0.1", 8420))
+        for good in ("127.0.0.1:8420", "localhost:8420"):
+            handler = web._Handler.__new__(web._Handler)
+            handler.headers = {"Host": good, "X-PQCheck-Token": token}
+            handler.server = server
+            self.assertTrue(handler._authorized(), good)
+        for evil in ("127.0.0.1:8420.evil.com", "127.0.0.1.evil.com:8420",
+                     "localhost.evil:8420", "localhost:8420evil",
+                     "127.0.0.1:9999", "127.0.0.1", ""):
+            handler = web._Handler.__new__(web._Handler)
+            handler.headers = {"Host": evil, "X-PQCheck-Token": token}
+            handler.server = server
+            self.assertFalse(handler._authorized(), evil)
+
+    def test_muse_demo_get_requires_token(self):
+        from types import SimpleNamespace
+
+        from pqcheck import web
+        token = web.session_token()
+        server = SimpleNamespace(server_address=("127.0.0.1", 8420))
+
+        def run(headers):
+            handler = web._Handler.__new__(web._Handler)
+            handler.headers = headers
+            handler.path = "/api/muse-demo"
+            handler.server = server
+            captured = {}
+
+            def _json(obj, code=200):
+                captured["obj"] = obj
+                captured["code"] = code
+
+            handler._json = _json
+            handler.do_GET()
+            return captured
+
+        self.assertEqual(
+            run({"Host": "127.0.0.1:8420"})["code"], 403)
+        self.assertEqual(
+            run({"Host": "127.0.0.1:8420.evil.com",
+                 "X-PQCheck-Token": token})["code"], 403)
+        self.assertEqual(
+            run({"Host": "127.0.0.1:8420",
+                 "X-PQCheck-Token": token})["code"], 200)
 
 
 if __name__ == "__main__":

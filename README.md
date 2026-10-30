@@ -99,7 +99,9 @@ must pass the secret-material floor. Results land in the report's
 ## Safety scope
 
 pqcheck is a defensive assurance tool. It only talks to targets the
-operator points it at locally, through declarative manifests. Reports are
+operator points it at locally, through declarative manifests. Only run
+manifests you trust: a manifest names the harness commands pqcheck will
+execute. Reports are
 designed to be pasted into public bug trackers: secret-shaped material is
 refused in claims and redacted from quoted target output.
 

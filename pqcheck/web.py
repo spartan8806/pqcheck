@@ -794,7 +794,8 @@ function claimHtml(c){
 }
 $("runmuse").addEventListener("click",async()=>{
  $("museout").textContent="running...";$("musereceipt").textContent="";
- const r=await (await fetch("/api/muse-demo")).json();
+ const r=await (await fetch("/api/muse-demo",{headers:POSTH})).json();
+ if(r.error){$("museout").textContent="not established: "+r.error;return}
  $("museout").textContent=(r.lines||[]).join("\\n");
  const x=r.receipt||{};
  $("musereceipt").textContent = x.mode==="inactive"
@@ -859,9 +860,18 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj))
 
     def _authorized(self) -> bool:
+        import re as _re
         host = self.headers.get("Host", "")
-        if host and not (host.startswith("127.0.0.1")
-                         or host.startswith("localhost")):
+        # Exact match only: loopback host with an explicit numeric
+        # port. Prefix checks (startswith) would accept
+        # "127.0.0.1.evil.com" or "localhost.evil".
+        if not _re.fullmatch(r"(127\.0\.0\.1|localhost):\d+", host or ""):
+            return False
+        try:
+            bound_port = self.server.server_address[1]  # type: ignore[attr-defined]
+        except Exception:
+            bound_port = None
+        if bound_port is not None and host.rsplit(":", 1)[-1] != str(bound_port):
             return False
         origin = self.headers.get("Origin")
         if origin and urlparse(origin).netloc != host:
@@ -890,6 +900,12 @@ class _Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/manifests":
                 return self._json(manifests_data())
             if parsed.path == "/api/muse-demo":
+                if not self._authorized():
+                    return self._json(
+                        {"error": "unauthorized: GET /api/muse-demo "
+                                  "requires the per-session "
+                                  "X-PQCheck-Token header from the served page "
+                                  "and a loopback Origin/Host"}, 403)
                 return self._json(muse_demo_data())
             return self._json({"error": "not found"}, 404)
         except Exception as exc:  # honest error, never a stack trace page

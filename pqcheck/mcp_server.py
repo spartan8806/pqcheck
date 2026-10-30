@@ -52,13 +52,6 @@ def _make_target(spec: str):
     return make(spec)
 
 
-@_tool("pqcheck.run_fixture",
-       "Run all relations against a whitelisted in-process fixture "
-       "spec ('clean:<Name>', 'mutant:<GROUP>:<name>', "
-       "'boundary:<label>') and return report counts.",
-       {"type": "object",
-        "properties": {"spec": {"type": "string"}},
-        "required": ["spec"]})
 def _fixture_report(spec: str) -> Report:
     if ":" not in spec or any(ch in spec for ch in "/\\;|&$`\"'<>"):
         raise ValueError("spec must be a whitelisted fixture id")
@@ -69,6 +62,13 @@ def _fixture_report(spec: str) -> Report:
     return Report(tuple(claims))
 
 
+@_tool("pqcheck.run_fixture",
+       "Run all relations against a whitelisted in-process fixture "
+       "spec ('clean:<Name>', 'mutant:<GROUP>:<name>', "
+       "'boundary:<label>') and return report counts.",
+       {"type": "object",
+        "properties": {"spec": {"type": "string"}},
+        "required": ["spec"]})
 def _run_fixture(args):
     spec = str(args.get("spec", ""))
     report = _fixture_report(spec)
