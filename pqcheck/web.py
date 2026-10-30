@@ -403,23 +403,39 @@ def run_target(spec: str, muse: bool = False) -> dict:
     if muse:
         from pqcheck import ai
         mode = ai.resolve_mode()
-        if mode == "inactive":
-            mode = "simulated"
-        try:
-            client = ai.make_client(mode)
-        except ai.MuseError:
-            mode = "simulated"
-            client = ai.make_client(mode)
-        report = ai.expand_report(
-            report, target, client, subject,
-            random.Random(f"web:{spec}:muse"), mode=mode)
+        # Live only when a key is configured. Never silently fall
+        # back to a simulated client behind the user's back.
+        if mode == "live":
+            try:
+                client = ai.make_client(mode)
+                report = ai.expand_report(
+                    report, target, client, subject,
+                    random.Random(f"web:{spec}:muse"), mode=mode)
+            except ai.MuseError:
+                pass
     return _report_dict(report, spec)
 
 
 def muse_demo_data() -> dict:
-    """Act 5 pipeline for the Muse AI Engine tab (simulated, offline)."""
-    from pqcheck.ai import run_act5
-    lines, _failures, receipt, _claims = run_act5()
+    """Muse expansion pipeline for the Muse AI Engine tab.
+
+    Live when a Muse key/base is configured (env or secrets/);
+    otherwise honestly INACTIVE -- the deterministic core's verdicts
+    stand alone and nothing is simulated behind the user's back."""
+    from pqcheck import ai
+    mode = ai.resolve_mode()
+    if mode != "live":
+        return {"lines": [
+            "Muse AI expansion: INACTIVE (no Muse API key configured).",
+            "Set MUSE_API_KEY and MUSE_API_BASE in the environment, or "
+            "put the key in secrets/muse_api_key (see secrets.example), "
+            "then restart the workbench server.",
+            "All deterministic checks still run in full without Muse; "
+            "Muse only explains, ranks, and proposes gated candidate "
+            "probes -- it never changes a verdict.",
+        ], "receipt": {"mode": "inactive"}}
+    lines, _failures, receipt, _claims = ai.run_act5(
+        client=ai.MuseClient(), mode="live")
     return {"lines": lines, "receipt": receipt}
 
 
@@ -643,7 +659,7 @@ defect so you can watch a finding happen on purpose.</p></section>
 <p class="meta">Toy fixtures, planted mutants, and boundary cases for demonstrating
 and self-testing pqcheck itself. Nothing here is a real project target.</p>
 <p><select id="target"></select> <button id="run">Run all relations</button></p>
-<p><label><input type="checkbox" id="museai"> Enable Muse AI Expansion (<code>muse-wonder-1.0</code>) — after the deterministic relations, Muse proposes candidate probes that are clean-control gated and executed in a wiped ephemeral sandbox (simulated offline unless a live key is configured server-side)</label></p>
+<p><label><input type="checkbox" id="museai"> Enable Muse AI Expansion (<code>muse-wonder-1.0</code>) — live only when a Muse key is configured server-side (env or secrets/); otherwise the deterministic verdicts stand alone, nothing is simulated</label></p>
 <p id="summary" class="meta"></p>
 <div id="report"></div>
 </div>
@@ -655,9 +671,9 @@ and self-testing pqcheck itself. Nothing here is a real project target.</p>
 <p><b>Tier 2 (opt-in):</b> pqcheck builds a compact GapDigest — target, capabilities, sizes, relations ran, calls executed, defects already caught, and the relations that were NOT_REACHED or NOT_ANSWERABLE — and asks Muse (<code>muse-wonder-1.0</code>) to propose candidate invariant probes only for those uncovered surfaces.</p>
 <p><b>Clean-Reference Precision Gate (anti-hallucination):</b> every candidate first runs against a clean reference fixture. A candidate that fires on correct code is rejected as an AI false positive and never becomes a finding.</p>
 <p><b>Ephemeral sandbox &amp; mandatory wipe:</b> surviving candidates execute against the real target under crash-watching inside a fresh temporary directory, which is deleted in a <code>finally</code> block and the deletion is asserted. Muse never emits an unverified prose finding.</p></section>
-<section><h3>Run the simulated pipeline</h3>
-<p class="meta">Offline simulated client, clean reference control, planted compound mutant as target.</p>
-<p><button id="runmuse">Run Muse AI Engine demo (Act 5)</button></p>
+<section><h3>Run the Muse expansion pipeline</h3>
+<p class="meta">Live Muse when a key is configured server-side; otherwise this honestly reports INACTIVE and how to configure it. For real targets, run a manifest with <code>python -m pqcheck run &lt;manifest&gt; --muse</code>.</p>
+<p><button id="runmuse">Run Muse AI Engine</button></p>
 <pre id="museout" class="meta"></pre>
 <p id="musereceipt" class="meta"></p></section>
 </div>

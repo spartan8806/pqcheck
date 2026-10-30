@@ -725,10 +725,12 @@ def expand_report(report: Report, target, client, subject: Subject, rng,
                   ai_receipt=receipt)
 
 
-def run_act5(seed: str = "pqcheck-demo-act5"):
-    """Demo Act 5: core relations hand a GapDigest to (simulated)
-    Muse; one over-aggressive candidate is rejected by the clean
-    gate; one valid compound candidate catches a planted defect."""
+def run_act5(seed: str = "pqcheck-act5", client=None, mode: str = "simulated"):
+    """Muse expansion pipeline: core relations hand a GapDigest to
+    Muse (live client when configured, simulated only when the
+    caller explicitly asks); one over-aggressive candidate is
+    rejected by the clean gate; one valid compound candidate
+    catches a planted defect."""
     from pqcheck.testing.toylwe import ToyLweKem
 
     lines: list[str] = []
@@ -751,8 +753,9 @@ def run_act5(seed: str = "pqcheck-demo-act5"):
         f"  GapDigest handed to Muse: gaps="
         f"{[g['relation'] for g in digest['unreached_or_unanswerable']][:4]}"
         f" already_caught={digest['already_caught']}")
-    expanded = expand_report(core, target, SimulatedMuseClient(), subject,
-                             random.Random(seed), mode="simulated")
+    expanded = expand_report(
+        core, target, client if client is not None else SimulatedMuseClient(),
+        subject, random.Random(seed), mode=mode)
     receipt = expanded.ai_receipt or {}
     lines.append(
         f"  candidates proposed: {receipt.get('candidates_proposed')}; "
