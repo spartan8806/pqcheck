@@ -87,6 +87,11 @@ def discover(folder) -> list[Candidate]:
         except OSError:
             return
         for entry in entries:
+            if entry.is_symlink() and entry.is_dir():
+                # Never follow directory symlinks out of the scanned
+                # folder: a linked directory could walk the whole
+                # filesystem beyond the operator-named root.
+                continue
             if entry.is_dir():
                 if entry.name in _SKIP_DIRS:
                     continue

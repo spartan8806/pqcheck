@@ -45,14 +45,6 @@
 - `PQClean#601` — PQClean issue 601; non-canonical ML-KEM `ek`
   coefficient acceptance class, reproduced in shape by
   `kem-ek-modulus-canonical`.
-- `CVE-2026-24850` — advisory identifier recorded for the
-  historical-defect corpus (see [04_BACKTEST.md](04_BACKTEST.md)).
-- `GHSA-mh4x-5q59-wqxx` — GitHub advisory identifier recorded for the
-  historical-defect corpus.
-- `GHSA-25rm-9wvm-m38v` — GitHub advisory recorded in the corpus as
-  OUT_OF_SCOPE: a distributional sampler-precision shape that
-  functional relations cannot see (see
-  [06_LIMITATIONS.md](06_LIMITATIONS.md)).
 - `CVE-2022-21449` — "Psychic Signatures": Java ECDSA accepted
   all-zero `(r, s)` values. The `sig-degenerate-values` relation is
   the pqcheck shape for this class.
@@ -60,3 +52,8 @@
   (XKCP and downstream). Recorded in the backtest corpus as MISSED:
   the relation exists, the historical C size-arithmetic instance is
   below the probed API surface.
+- Advisory identifiers are cited here only when they resolve in a
+  public database (CVE / GitHub Advisory Database / RUSTSEC).
+  Unverified identifiers are not cited; historical shapes without a
+  public advisory are described by defect class in the backtest
+  corpus instead.

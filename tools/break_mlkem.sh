@@ -8,7 +8,8 @@
 #   BREAK_AFTER     literal line after which BREAK_INSERT is inserted
 #   BREAK_INSERT    the one line to insert (the planted bypass)
 #   CHECKOUT        local checkout to patch (must be a clean git tree)
-#   BUILD_CMD       build command, run inside CHECKOUT
+#   BUILD_CMD       build command as plain argv words (no shell:
+#                   no pipes, redirects, or ';' -- run inside CHECKOUT
 #   PQC_MANIFEST    pqcheck manifest for the built harness
 #   PQC_ALGORITHM   algorithm argument for pqcheck run
 # The patch is reverted via trap on ANY exit, then the target is rebuilt
@@ -47,7 +48,8 @@ else:
 open(path, "w", encoding="utf-8").writelines(lines)
 PY
 
-eval "$BUILD_CMD"
+read -r -a BUILD_ARGV <<< "$BUILD_CMD"
+"${BUILD_ARGV[@]}"
 echo "--- running pqcheck against the PLANTED build (must find the FO defect) ---"
 set +e
 python3 -m pqcheck run "$PQC_MANIFEST" --algorithm "$PQC_ALGORITHM" \
@@ -61,7 +63,8 @@ fi
 
 revert
 trap - EXIT
-eval "$BUILD_CMD"
+read -r -a BUILD_ARGV <<< "$BUILD_CMD"
+"${BUILD_ARGV[@]}"
 echo "--- running pqcheck against the CLEAN build (must pass) ---"
 python3 -m pqcheck run "$PQC_MANIFEST" --algorithm "$PQC_ALGORITHM" \
   --relation kem-fo-liveness

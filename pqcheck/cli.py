@@ -556,6 +556,8 @@ def build_parser() -> argparse.ArgumentParser:
     web = sub.add_parser("web", help="local browser workbench (127.0.0.1 only)")
     web.add_argument("--port", type=int, default=8420)
     web.set_defaults(fn=lambda a: __import__("pqcheck.web", fromlist=["serve"]).serve(a.port))
+    mcp = sub.add_parser("mcp", help="read-only MCP server over stdio (no writes, no manifests, no commands)")
+    mcp.set_defaults(fn=lambda a: __import__("pqcheck.mcp_server", fromlist=["main"]).main())
     return parser
 
 

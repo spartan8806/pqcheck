@@ -1,6 +1,7 @@
 {
-  "target": "your-c-library",
-  "version": "0000000",
+  "example": true,
+  "target": "EXAMPLE: your C library (replace target, version, and harness before use)",
+  "version": "0.0.0-example",
   "adapter": "c",
   "harness": "../pqcheck/adapters/harness_yourlib",
   "wsl": false,

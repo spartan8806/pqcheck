@@ -55,14 +55,12 @@ class PadBitsZero(CodecRelation):
 
     def check(self, target, rng):
         if getattr(target, "codec_kind", None) != "sign_magnitude_unary":
-            # fixed-width codecs have no padding region; probe the final byte's
-            # acceptance is covered by length relations. Report clean on the
-            # observations we can make: encode/decode still round-trip.
-            enc = target.encode(_CAL)
-            if not ok(enc):
-                return Finding(None, "encode failed", 0, "pad bits")
-            dec = target.decode(enc.value)
-            return Finding(ok(dec), "no padding region in a fixed-width codec" if ok(dec) else "decode failed", 1, "pad-bit probe (fixed-width codec)")
+            # A fixed-width codec has no padding region, so this
+            # question cannot be asked of it. Reporting "no defect
+            # found" here would be reassurance over an untested
+            # surface; the runner maps this to NOT_ANSWERABLE.
+            raise NotApplicable(
+                "fixed-width codec has no padding region to test")
         coeffs = (1, -1, 1, 0, 0, 0, 0, 0)
         enc = target.encode(coeffs)
         if not ok(enc):

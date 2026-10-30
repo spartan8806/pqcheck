@@ -4,7 +4,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from probe_lib import SUBJ, check, passed  # noqa: E402
+_pq_here = Path(__file__).resolve()
+_pq_root = (_pq_here.parents[3] if _pq_here.parents[2].name == "pqcheck" else _pq_here.parents[1])
+sys.path.insert(0, str(_pq_root))
+from pqcheck.assets.probes.probe_lib import SUBJ, check, passed  # noqa: E402
 
 from pqcheck.verdict import Claim, ClaimError, Method, Verdict, redact_target_output  # noqa: E402
 

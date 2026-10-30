@@ -4,6 +4,8 @@ Zero-dependency Python 3.10+ assurance and property-testing tool for
 post-quantum cryptographic (PQC) implementations: KEMs, digital signatures,
 and wire-format codecs.
 
+**Written from scratch during the event (Oct 26 - Nov 4) from the FIPS 203/204 and Falcon specs.** Where this implementation deviates from its own specification, that is recorded openly in [DEVIATIONS.md](DEVIATIONS.md).
+
 Instead of known-answer tests, pqcheck checks **metamorphic relations and
 specification invariants** — FO implicit-rejection binding and liveness,
 encoding canonicality, declared-length wrap boundaries, guard-fill
@@ -73,6 +75,7 @@ rather than guessed.
 - [pqcheck/target.py](pqcheck/target.py) — target seam and process-death attribution
 - [pqcheck/relations/](pqcheck/relations/) — the 34 relations and the runner
 - [pqcheck/ai.py](pqcheck/ai.py) — Muse AI Expansion Engine (opt-in, clean-control gated)
+- [pqcheck/mcp_server.py](pqcheck/mcp_server.py) — read-only MCP server (python -m pqcheck mcp): runs checks and returns results, no file writes or arbitrary commands
 - [pqcheck/adapters/](pqcheck/adapters/) — C harness, Noble (JS), codec and hint bridges
 - [pqcheck/testing/](pqcheck/testing/) — reference toys, planted mutants, precision fixtures
 - [pqcheck/backtest/](pqcheck/backtest/) — historical defect-class corpus and accounting
@@ -82,7 +85,7 @@ rather than guessed.
 
 Without a key, pqcheck is the deterministic core above and prints
 `Muse AI expansion: INACTIVE (34 deterministic relations ran at 0 tokens; ...)`.
-With `--muse` (live, needs `MUSE_API_KEY`/`MUSE_API_BASE`), or
+With `--muse` (live, needs `MUSE_API_KEY`/`MUSE_API_BASE` from the environment or a gitignored `secrets/muse_api_key` file -- see `secrets.example`; the key is never logged or printed), or
 `--muse-simulate` (offline simulated client), the core report is
 summarized into a compact GapDigest and Muse may propose candidate
 probes for uncovered surfaces. Muse never emits an unverified

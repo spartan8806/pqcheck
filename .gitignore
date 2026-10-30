@@ -3,6 +3,8 @@
 # READMEs recreate all of it.
 __pycache__/
 *.egg-info/
+# Local secrets (API keys). Only secrets.example is shipped.
+secrets/
 build/
 vendor/
 .wheel-venv/
@@ -17,3 +19,7 @@ pqcheck/adapters/codec_harness_bin
 pqcheck/adapters/harness_liboqs
 pqcheck/adapters/harness_pqclean
 pqcheck/adapters/pqcheck_codec_harness
+
+# Internal build prompts (kept locally, not shipped publicly)
+BUILD_PROMPTS.md
+BUILD_PROMPTS_SET_2.md

@@ -1,12 +1,32 @@
-"""Declarative target manifests."""
+"""Declarative target manifests.
+
+A manifest is untrusted data. Loading one never evaluates, imports,
+or executes anything named by its fields: parsing is JSON plus the
+strict schema in ``Manifest.__init__`` (unknown fields are refused,
+every field is type- and shape-checked). Code is only ever loaded
+later, when an operator explicitly runs that manifest through the
+CLI's validated runner -- and even then adapters spawn argv arrays,
+never a shell.
+"""
 from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from pqcheck.verdict import Subject
+
+ALLOWED_FIELDS = frozenset({
+    "target", "version", "adapter", "algorithms", "harness",
+    "node_cwd", "wsl", "padded", "kind", "oracle", "validation",
+    "module", "command", "example",
+})
+_ALGORITHM_RE = re.compile(
+    r"^(?:kem:|sig:)?[A-Za-z0-9][A-Za-z0-9._+\-]*"
+    r"(?:\[[A-Za-z0-9._+\-]+\])?$")
+_SAFE_TEXT_RE = re.compile(r"^[^\x00-\x1f;|&$`\"'<>\\]+$")
 
 ADAPTERS: dict[str, dict] = {
     "c": {"required": ("harness",), "optional": ("wsl", "padded", "kind"), "algorithms": "required"},
@@ -43,6 +63,20 @@ class Manifest:
     def __init__(self, data: dict, path: Path | None = None):
         if not isinstance(data, dict):
             raise ManifestError("manifest must be a JSON object")
+        unknown = set(data) - ALLOWED_FIELDS
+        if unknown:
+            raise ManifestError(
+                f"unknown manifest field(s): {sorted(unknown)}; "
+                "manifests are untrusted data and are validated "
+                "against a strict schema")
+        for field_name, value in data.items():
+            if isinstance(value, str) and "\x00" in value:
+                raise ManifestError(
+                    f"manifest field {field_name!r} contains a NUL byte")
+        example = data.get("example", False)
+        if not isinstance(example, bool):
+            raise ManifestError("manifest field 'example' must be a boolean")
+        self.example = example
         self.raw = dict(data)
         self.path = Path(path) if path else Path("manifest.json")
         self.base = self.path.parent
@@ -66,6 +100,12 @@ class Manifest:
         if spec["algorithms"] == "required":
             if not isinstance(algorithms, list) or not algorithms or not all(isinstance(a, str) and a for a in algorithms):
                 raise ManifestError(f"adapter {self.adapter!r} requires a non-empty 'algorithms' list")
+            for entry in algorithms:
+                if not _ALGORITHM_RE.match(entry):
+                    raise ManifestError(
+                        f"invalid algorithm name {entry!r}; expected "
+                        "an optional kem:/sig: prefix followed by a "
+                        "plain algorithm identifier")
             self.algorithms = tuple(algorithms)
         else:
             if algorithms:
@@ -83,7 +123,22 @@ class Manifest:
         if "node_cwd" in spec["required"] and self.node_cwd is None:
             raise ManifestError("manifest field 'node_cwd' must be a string path")
         self.kind = data.get("kind")
+        if self.kind is not None and self.kind not in ("kem", "sig"):
+            raise ManifestError("manifest field 'kind' must be 'kem' or 'sig'")
         self.oracle = data.get("oracle")
+        if self.oracle is not None and not (
+                isinstance(self.oracle, str)
+                and _SAFE_TEXT_RE.match(self.oracle)):
+            raise ManifestError(
+                "manifest field 'oracle' must be a plain label "
+                "(no shell metacharacters or control characters)")
+        for path_field in ("harness", "node_cwd", "module"):
+            value = data.get(path_field)
+            if value is not None and not (
+                    isinstance(value, str) and value.strip()):
+                raise ManifestError(
+                    f"manifest field {path_field!r} must be a "
+                    "non-empty string")
         # --- explicit API validation contract (Set 3, Phase 12) -----
         # FIPS 203 permits key checking earlier in a workflow, so who
         # validates raw serialized keys must be declared, not assumed.
@@ -123,6 +178,14 @@ class Manifest:
             if not (isinstance(command, list) and command
                     and all(isinstance(c, str) and c for c in command)):
                 raise ManifestError("adapter 'exec' requires manifest field 'command' (non-empty argv list)")
+            _SHELLS = {"sh", "bash", "zsh", "dash", "cmd", "cmd.exe",
+                       "powershell", "powershell.exe", "pwsh", "pwsh.exe"}
+            import os as _os
+            if _os.path.basename(command[0]).lower() in _SHELLS:
+                raise ManifestError(
+                    "adapter 'exec' command must be a harness argv, "
+                    "not a shell interpreter; manifests never run "
+                    "through a shell")
         self.command: list[str] | None = list(command) if isinstance(command, list) else None
 
     @classmethod

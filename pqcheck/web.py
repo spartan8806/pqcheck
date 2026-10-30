@@ -13,6 +13,20 @@ from __future__ import annotations
 import json
 import random
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import hmac as _hmac
+import secrets as _secrets
+
+_SESSION_TOKEN = None
+
+
+def session_token() -> str:
+    """Per-session POST token: served in the page body (never a URL),
+    required as the X-PQCheck-Token header on every POST."""
+    global _SESSION_TOKEN
+    if _SESSION_TOKEN is None:
+        _SESSION_TOKEN = _secrets.token_urlsafe(32)
+    return _SESSION_TOKEN
 from urllib.parse import parse_qs, urlparse
 
 import pqcheck.relations  # noqa: F401  (populates REGISTRY)
@@ -412,18 +426,15 @@ def muse_demo_data() -> dict:
 def _run_manifest() -> dict:
     from pathlib import Path
 
-    from pqcheck.cli import open_target
+    from pqcheck.cli import run_manifest_validated
     from pqcheck.manifest import Manifest
     manifest = Manifest.load(
         Path(__file__).resolve().parents[1] / "manifests" / "python-reference.json")
-    claims = []
-    for algorithm in manifest.algorithms:
-        target = open_target(manifest, algorithm)
-        subject = manifest.subject(algorithm)
-        for rid, relation in sorted(REGISTRY.items()):
-            claims.append(relation.run(
-                target, subject, random.Random(f"web:manifest:{algorithm}:{rid}")))
-    return _report_dict(Report(tuple(claims)), "manifest:python-reference")
+    # Validated runner only: provenance problems become NOT_REACHED
+    # claims and every opened target is closed in a finally block.
+    report = run_manifest_validated(
+        manifest, list(manifest.algorithms or [None]), sorted(REGISTRY))
+    return _report_dict(report, "manifest:python-reference")
 
 
 def _report_dict(report: Report, spec: str) -> dict:
@@ -680,6 +691,8 @@ counted as clean), and per-claim reproduction instructions. Fixtures are labelle
 
 <script>
 const $=id=>document.getElementById(id);
+const PQTOKEN="__PQCHECK_TOKEN__";
+const POSTH={"Content-Type":"application/json","X-PQCheck-Token":PQTOKEN};
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
  b.classList.add("active");
@@ -703,7 +716,7 @@ async function loadManifests(){
 }
 $("runmanifest").addEventListener("click",async()=>{
  $("mfsummary").textContent="running...";$("mfreport").innerHTML="";
- const r=await (await fetch("/api/run-manifest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("manifest").value})})).json();
+ const r=await (await fetch("/api/run-manifest",{method:"POST",headers:POSTH,body:JSON.stringify({name:$("manifest").value})})).json();
  if(r.error){$("mfsummary").textContent="not established: "+r.error;$("mfreport").innerHTML="";return}
  $("mfsummary").textContent=`${r.target} @ revision ${r.revision} [${r.kind||"manifest target"}] | `+
   Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
@@ -717,7 +730,7 @@ function download(name, text, type){
 }
 $("inspect").addEventListener("click",async()=>{
  $("identity").innerHTML="checking...";$("runproj").disabled=true;
- const r=await (await fetch("/api/project/inspect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:$("projpath").value})})).json();
+ const r=await (await fetch("/api/project/inspect",{method:"POST",headers:POSTH,body:JSON.stringify({path:$("projpath").value})})).json();
  if(r.error){$("identity").innerHTML=`<section><p>could not open: ${esc(r.error)}</p></section>`;return}
  const id=r.target?`<p><b>Target:</b> ${esc(r.target)} &nbsp; <b>Revision:</b> <code>${esc(r.revision)}</code><br>
   <b>Adapter:</b> ${esc(r.adapter)} &nbsp; <b>Algorithms:</b> ${esc((r.algorithms||[]).join(", ")||"(none)")}<br>
@@ -735,7 +748,7 @@ $("inspect").addEventListener("click",async()=>{
 });
 $("runproj").addEventListener("click",async()=>{
  $("projsummary").textContent="running checks through the validated runner...";$("projreport").innerHTML="";
- const r=await (await fetch("/api/project/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:$("projpath").value})})).json();
+ const r=await (await fetch("/api/project/run",{method:"POST",headers:POSTH,body:JSON.stringify({path:$("projpath").value})})).json();
  if(r.error){$("projsummary").textContent="not established: "+r.error;return}
  lastProject=r;
  $("projsummary").textContent=`${r.target} @ revision ${r.revision} | adapter ${r.adapter} | ${r.platform} | `+
@@ -772,7 +785,7 @@ $("runmuse").addEventListener("click",async()=>{
 });
 $("run").addEventListener("click",async()=>{
  $("summary").textContent="running...";$("report").innerHTML="";
- const r=await (await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:$("target").value,muse:$("museai").checked})})).json();
+ const r=await (await fetch("/api/run",{method:"POST",headers:POSTH,body:JSON.stringify({target:$("target").value,muse:$("museai").checked})})).json();
  if(r.error){$("summary").textContent="error: "+r.error;return}
  $("summary").textContent=Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
  $("report").innerHTML=renderBuckets(r);
@@ -827,11 +840,25 @@ class _Handler(BaseHTTPRequestHandler):
     def _json(self, obj, code=200):
         self._send(code, json.dumps(obj))
 
+    def _authorized(self) -> bool:
+        host = self.headers.get("Host", "")
+        if host and not (host.startswith("127.0.0.1")
+                         or host.startswith("localhost")):
+            return False
+        origin = self.headers.get("Origin")
+        if origin and urlparse(origin).netloc != host:
+            return False
+        token = self.headers.get("X-PQCheck-Token", "")
+        return _hmac.compare_digest(token, session_token())
+
     def do_GET(self):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/":
-                return self._send(200, PAGE, "text/html; charset=utf-8")
+                return self._send(
+                    200, PAGE.replace("__PQCHECK_TOKEN__",
+                                      session_token()),
+                    "text/html; charset=utf-8")
             if parsed.path == "/api/targets":
                 return self._json(targets_catalog())
             if parsed.path == "/api/relations":
@@ -855,6 +882,11 @@ class _Handler(BaseHTTPRequestHandler):
         if parsed.path not in ("/api/run", "/api/run-manifest",
                                "/api/project/inspect", "/api/project/run"):
             return self._json({"error": "not found"}, 404)
+        if not self._authorized():
+            return self._json(
+                {"error": "unauthorized: POST requires the per-session "
+                          "X-PQCheck-Token header from the served page "
+                          "and a loopback Origin/Host"}, 403)
         try:
             length = int(self.headers.get("Content-Length") or 0)
             if length > 65536:
@@ -875,6 +907,8 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 8420) -> int:
+    global _SESSION_TOKEN
+    _SESSION_TOKEN = _secrets.token_urlsafe(32)
     server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     print(f"pqcheck workbench: http://127.0.0.1:{port}/ (loopback only)")
     try:

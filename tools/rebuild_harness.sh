@@ -10,5 +10,7 @@ NAME="${1:?usage: rebuild_harness.sh <harness-name>}"
 SRC="$ROOT/pqcheck/adapters/$NAME.c"
 [[ -f "$SRC" ]] || { echo "no such harness source: $SRC" >&2; exit 1; }
 OUT="${OUT:-$ROOT/pqcheck/adapters/$NAME}"
-cc -O2 -o "$OUT" "$SRC" ${LIB_SRC:-}
+LIB_ARGS=()
+[[ -n "${LIB_SRC:-}" ]] && LIB_ARGS=("$LIB_SRC")
+cc -O2 -o "$OUT" "$SRC" "${LIB_ARGS[@]}"
 echo "built $OUT"

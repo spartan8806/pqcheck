@@ -36,7 +36,7 @@ jobs:
                   elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                       names = [node.module.split(".")[0]]
                   for name in names:
-                      if name not in ("pqcheck", "probe_lib") and name not in sys.stdlib_module_names:
+                      if name != "pqcheck" and name not in sys.stdlib_module_names:
                           bad.append(f"{path}: {name}")
           print("\n".join(bad) if bad else "zero third-party imports: ok")
           raise SystemExit(1 if bad else 0)

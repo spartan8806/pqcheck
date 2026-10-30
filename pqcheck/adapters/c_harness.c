@@ -179,17 +179,21 @@ int main(int argc, char **argv) {
             fflush(stdout);
         } else if (strcmp(cmd, "guard") == 0) {
             char *a = strtok_r(NULL, " \r\n", &save);
-            free(g_guard); g_guard = NULL; g_guard_n = 0;
             if (a && strcmp(a, "-") != 0) {
                 size_t n = 0; uint8_t *tmp = parse_hex(a, &n);
-                /* parse_hex appended the old (empty) guard; copy payload only */
-                g_guard = malloc(n ? n : 1);
-                if (tmp) memcpy(g_guard, tmp, n);
-                g_guard_n = n; free(tmp);
+                if (!tmp) { printf("ERR bad guard hex\n"); fflush(stdout); continue; }
+                /* parse_hex appended the old guard; copy payload only */
+                uint8_t *fresh = malloc(n ? n : 1);
+                if (!fresh) { free(tmp); printf("ERR guard allocation failed\n"); fflush(stdout); continue; }
+                memcpy(fresh, tmp, n); free(tmp);
+                free(g_guard); g_guard = fresh; g_guard_n = n;
+            } else {
+                free(g_guard); g_guard = NULL; g_guard_n = 0;
             }
             printf("OK guard=%zu\n", g_guard_n); fflush(stdout);
         } else if (strcmp(cmd, "keygen") == 0) {
             uint8_t *pk = malloc(PQ_PK_BYTES), *sk = malloc(PQ_SK_BYTES);
+            if (!pk || !sk) { printf("ERR keygen allocation failed\n"); fflush(stdout); free(pk); free(sk); continue; }
             int rc = is_kem ? pqc_kem_keygen(pk, sk) : pqc_sig_keygen(pk, sk);
             if (rc == 0) { printf("OK "); print_hex(pk, PQ_PK_BYTES); printf(" "); print_hex(sk, PQ_SK_BYTES); printf("\n"); }
             else if (rc == 1) printf("REJ keygen refused\n");
@@ -200,6 +204,8 @@ int main(int argc, char **argv) {
             uint8_t *ek = a ? parse_hex(a, &an) : NULL;
             uint8_t *ct = malloc(PQ_CT_BYTES), *ss = malloc(PQ_SS_BYTES);
             if (!ek) { printf("ERR bad hex\n"); fflush(stdout); free(ct); free(ss); continue; }
+            if (!ct || !ss) { printf("ERR encaps allocation failed\n"); fflush(stdout); free(ek); free(ct); free(ss); continue; }
+            if (an != PQ_PK_BYTES) { printf("REJ bad ek length\n"); fflush(stdout); free(ek); free(ct); free(ss); continue; }
             int rc = pqc_kem_encaps(ct, ss, ek);
             if (rc == 0) { printf("OK "); print_hex(ss, PQ_SS_BYTES); printf(" "); print_hex(ct, PQ_CT_BYTES); printf("\n"); }
             else if (rc == 1) printf("REJ encaps refused\n");
@@ -211,6 +217,8 @@ int main(int argc, char **argv) {
             uint8_t *dk = a ? parse_hex(a, &an) : NULL, *ct = b ? parse_hex(b, &bn) : NULL;
             uint8_t *ss = malloc(PQ_SS_BYTES);
             if (!dk || !ct) { printf("ERR bad hex\n"); fflush(stdout); free(dk); free(ct); free(ss); continue; }
+            if (!ss) { printf("ERR decaps allocation failed\n"); fflush(stdout); free(dk); free(ct); continue; }
+            if (an != PQ_SK_BYTES || bn != PQ_CT_BYTES) { printf("REJ bad decaps length\n"); fflush(stdout); free(dk); free(ct); free(ss); continue; }
             int rc = pqc_kem_decaps(ss, ct, dk);
             if (rc == 0) { printf("OK "); print_hex(ss, PQ_SS_BYTES); printf("\n"); }
             else if (rc == 1) printf("REJ decaps refused\n");
@@ -222,6 +230,8 @@ int main(int argc, char **argv) {
             uint8_t *sk = a ? parse_hex(a, &an) : NULL, *msg = b ? parse_hex(b, &bn) : NULL;
             uint8_t *sig = malloc(PQ_SIG_BYTES);
             if (!sk || !msg) { printf("ERR bad hex\n"); fflush(stdout); free(sk); free(msg); free(sig); continue; }
+            if (!sig) { printf("ERR sign allocation failed\n"); fflush(stdout); free(sk); free(msg); continue; }
+            if (an != PQ_SK_BYTES) { printf("REJ bad sk length\n"); fflush(stdout); free(sk); free(msg); free(sig); continue; }
             int rc = pqc_sig_sign(sig, sk, msg, bn);
             if (rc == 0) { printf("OK "); print_hex(sig, PQ_SIG_BYTES); printf("\n"); }
             else if (rc == 1) printf("REJ sign refused\n");
@@ -232,6 +242,7 @@ int main(int argc, char **argv) {
             size_t an = 0, bn = 0, cn = 0;
             uint8_t *pk = a ? parse_hex(a, &an) : NULL, *msg = b ? parse_hex(b, &bn) : NULL, *sig = c ? parse_hex(c, &cn) : NULL;
             if (!pk || !msg || !sig) { printf("ERR bad hex\n"); fflush(stdout); free(pk); free(msg); free(sig); continue; }
+            if (an != PQ_PK_BYTES) { printf("REJ bad pk length\n"); fflush(stdout); free(pk); free(msg); free(sig); continue; }
             if (cn != PQ_SIG_BYTES) { printf("REJ bad sig length\n"); fflush(stdout); free(pk); free(msg); free(sig); continue; }
             int rc = pqc_sig_verify(pk, msg, bn, sig);
             if (rc == 0) reply_ok();

@@ -6,7 +6,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from probe_lib import MANIFESTS_DIR, check, passed  # noqa: E402
+_pq_here = Path(__file__).resolve()
+_pq_root = (_pq_here.parents[3] if _pq_here.parents[2].name == "pqcheck" else _pq_here.parents[1])
+sys.path.insert(0, str(_pq_root))
+from pqcheck.assets.probes.probe_lib import MANIFESTS_DIR, check, passed  # noqa: E402
 
 from pqcheck.cli import main  # noqa: E402
 from pqcheck.manifest import Manifest  # noqa: E402

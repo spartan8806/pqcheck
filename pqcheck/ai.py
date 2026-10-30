@@ -69,6 +69,34 @@ def inactive_footer() -> str:
             "to enable dynamic relation synthesis).")
 
 
+_SECRET_FILES = ("secrets/muse_api_key", "secrets/muse_api_key.txt",
+                 "secrets/api_key", "secrets/api_key.txt")
+
+
+def resolve_api_key(env: dict | None = None, root=None) -> str:
+    """API key from the environment or a gitignored secrets/ folder.
+
+    Never logged, printed, or included in any report: callers only
+    learn whether a key exists, never its value.
+    """
+    env = os.environ if env is None else env
+    key = (env.get("MUSE_API_KEY") or "").strip()
+    if key:
+        return key
+    from pathlib import Path
+    bases = [Path(root)] if root else [Path.cwd(),
+                                       Path(__file__).resolve().parents[1]]
+    for base in bases:
+        for rel in _SECRET_FILES:
+            try:
+                text = (base / rel).read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if text:
+                return text.splitlines()[0].strip()
+    return ""
+
+
 def resolve_mode(muse: bool = False, simulate: bool = False,
                  no_muse: bool = False, env: dict | None = None) -> str:
     """live | simulated | inactive. Simulation wins when requested so
@@ -78,9 +106,54 @@ def resolve_mode(muse: bool = False, simulate: bool = False,
         return "simulated"
     if no_muse:
         return "inactive"
-    if muse or env.get("MUSE_API_KEY"):
+    if muse or resolve_api_key(env):
         return "live"
     return "inactive"
+
+
+_RANK = {Verdict.DEFECT_FOUND: 0, Verdict.NOT_REACHED: 1,
+         Verdict.NOT_ANSWERABLE: 3, Verdict.NO_DEFECT_FOUND: 2}
+
+
+def rank_claims(report: Report) -> list[Claim]:
+    """Findings first, then gaps, then clean/witness results. Pure
+    ordering of the deterministic claims; nothing is added, removed,
+    or re-verdicted."""
+    return sorted(
+        report.claims,
+        key=lambda c: (
+            2.5 if (c.verdict is Verdict.NO_DEFECT_FOUND and c.one_sided)
+            else _RANK[c.verdict],
+            c.method.name))
+
+
+def explain_report(report: Report) -> str:
+    """Plain-English explanation of a finished report, ranked by
+    importance. Muse (or this offline fallback) explains and ranks
+    only: every verdict quoted here is the deterministic core's,
+    copied verbatim -- explanation can never change a verdict, and
+    with no API key this text is generated locally at zero tokens."""
+    lines = ["In plain English, most important first:"]
+    ranked = rank_claims(report)
+    if not ranked:
+        lines.append("- Nothing ran: this report established nothing.")
+        return "\n".join(lines)
+    for claim in ranked:
+        label = {
+            Verdict.DEFECT_FOUND: "Finding",
+            Verdict.NOT_REACHED: "Not run (nothing established)",
+            Verdict.NOT_ANSWERABLE: "Not answerable for this target",
+            Verdict.NO_DEFECT_FOUND: (
+                "Inconclusive witness search (not a pass)"
+                if claim.one_sided else "Check completed, no defect found"),
+        }[claim.verdict]
+        lines.append(
+            f"- {label}: {claim.property} "
+            f"[{claim.method.name}; verdict {claim.verdict.value}]")
+    lines.append(
+        "These verdicts come only from the deterministic relations; "
+        "this explanation does not change any of them.")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- digest
@@ -229,7 +302,7 @@ class MuseClient:
     def __init__(self, base: str | None = None, key: str | None = None,
                  model: str | None = None, timeout: float = 30.0):
         self.base = (base or os.environ.get("MUSE_API_BASE", "")).rstrip("/")
-        self.key = key or os.environ.get("MUSE_API_KEY", "")
+        self.key = key or resolve_api_key()
         self.model = model or os.environ.get("MUSE_MODEL", MODEL_DEFAULT)
         self.timeout = timeout
         if not self.base or not self.key:

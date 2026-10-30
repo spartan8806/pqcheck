@@ -90,15 +90,32 @@ def main(argv=None) -> int:
     if len(args) != 2:
         print("usage: python ctgrind_triage.py <valgrind.log> <ALG>")
         return 3
-    results = triage(args[0], args[1])
+    log_path = Path(args[0])
+    if not log_path.is_file():
+        # A missing log means the tool run failed or crashed; that is
+        # an ERROR, never a pass.
+        print(f"ERROR: valgrind log not found: {log_path} "
+              "(tool error or crash; this is not a PASS)")
+        return 2
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    if "==" not in text and "valgrind" not in text.lower():
+        print("ERROR: log contains no valgrind output "
+              "(tool error or crash; this is not a PASS)")
+        return 2
+    results = triage(text, args[1])
     if not results:
         print("no uninitialised-value reports parsed from the log")
+        return 0
+    status = 0
     for label, frames in results:
         top = frames[0] if frames else "?"
         print(f"{label}: top frame {top} ({len(frames)} frames)")
         if label == "UNEXPLAINED":
             print(WARNING)
-    return 0
+            status = 1
+        elif label == "KNOWN ISSUE":
+            status = 1
+    return status
 
 
 if __name__ == "__main__":
