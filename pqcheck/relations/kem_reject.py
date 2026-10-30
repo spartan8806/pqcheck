@@ -157,8 +157,10 @@ class FoLiveness(KemRelation):
     one_sided = True
     false_positive_modes = (
         "declared encoding slack (reserved/padding ciphertext bytes) is real "
-        "malleability, not a dead FO check; the evidence separates the two "
-        "via per-byte leaking bit-masks and must not claim the check is absent",
+        "malleability, not a dead FO check; the evidence lists the witness "
+        "byte offsets and must not claim the check is absent; separating "
+        "declared slack from a dead check is the precision suite's job "
+        "(may_fire), not this relation's",
     )
 
     def check(self, target, rng):

@@ -21,6 +21,11 @@ Reading order for a technical reviewer:
 8. [06_LIMITATIONS.md](06_LIMITATIONS.md) — what pqcheck cannot see.
 9. [REFERENCES.md](REFERENCES.md) — standards and defect citations.
 
+The opt-in Muse AI Expansion Engine is documented in the main
+[README](../README.md#muse-ai-expansion-opt-in) and demonstrated by
+`python -m pqcheck demo` Act 5; its limits are in
+[06_LIMITATIONS.md](06_LIMITATIONS.md).
+
 Conventions: every repository path in these documents is checked by
 [probes/verify_paths_resolve.py](../probes/verify_paths_resolve.py), and
 every quantitative claim in the README files is checked by

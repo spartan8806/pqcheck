@@ -178,6 +178,83 @@ def run_manifest_validated(manifest, algorithms, relation_ids, seed_hex=None) ->
     return Report(tuple(_run_relations(manifest, algorithms, relation_ids, seed_hex)))
 
 
+def _muse_mode(args) -> str:
+    from pqcheck import ai
+    return ai.resolve_mode(
+        muse=getattr(args, "muse", False),
+        simulate=getattr(args, "muse_simulate", False),
+        no_muse=getattr(args, "no_muse", False))
+
+
+def _expand_with_muse(report, manifest, algorithms, args, mode):
+    """Tier 2: expand a core report per algorithm against freshly
+    opened targets. Provenance problems skip expansion entirely;
+    Muse is never pointed at a target the validated runner refused."""
+    import dataclasses
+    import random as _random
+
+    from pqcheck import ai
+
+    base_receipt = {
+        "mode": mode, "model": ai.MODEL_DEFAULT,
+        "core_relations_ran": len(report.claims),
+        "core_calls_executed": 0, "estimated_tokens_saved": 0,
+        "candidates_proposed": 0, "candidates_rejected_by_clean_control": 0,
+        "candidates_verified": 0, "ephemeral_temp_dirs_created": 0,
+        "ephemeral_temp_dirs_wiped": 0, "ephemeral_dir_wiped": True,
+        "notes": [],
+    }
+    if _manifest_problems(manifest):
+        base_receipt["notes"].append(
+            "Muse expansion skipped: manifest provenance problems "
+            "(see NOT_REACHED claims)")
+        return dataclasses.replace(report, ai_receipt=base_receipt)
+    try:
+        client = ai.make_client(mode)
+    except ai.MuseError as exc:
+        base_receipt["notes"].append(str(exc))
+        return dataclasses.replace(report, ai_receipt=base_receipt)
+    base_receipt["model"] = getattr(client, "model", ai.MODEL_DEFAULT)
+
+    claims = list(report.claims)
+    for algorithm in algorithms:
+        try:
+            target = open_target(manifest, algorithm)
+        except (HarnessProtocolError, OSError) as exc:
+            base_receipt["notes"].append(
+                f"Muse expansion skipped for {algorithm}: target could "
+                f"not be opened ({type(exc).__name__})")
+            continue
+        try:
+            try:
+                target.api_contract = dict(manifest.validation)
+            except Exception:
+                pass
+            sub = Report(tuple(
+                c for c in report.claims if c.subject.algorithm == algorithm))
+            expanded = ai.expand_report(
+                sub, target, client, manifest.subject(algorithm),
+                _random.Random(f"muse:{algorithm}:{args.seed}"), mode=mode)
+            claims.extend(expanded.claims[len(sub.claims):])
+            r = expanded.ai_receipt or {}
+            for key in ("core_calls_executed", "estimated_tokens_saved",
+                        "candidates_proposed",
+                        "candidates_rejected_by_clean_control",
+                        "candidates_verified", "ephemeral_temp_dirs_created",
+                        "ephemeral_temp_dirs_wiped"):
+                base_receipt[key] += int(r.get(key, 0))
+            base_receipt["ephemeral_dir_wiped"] = bool(
+                base_receipt["ephemeral_dir_wiped"]
+                and r.get("ephemeral_dir_wiped", True))
+            base_receipt["notes"].extend(r.get("notes") or [])
+        finally:
+            close = getattr(target, "close", None)
+            if callable(close):
+                close()
+    return dataclasses.replace(
+        report, claims=tuple(claims), ai_receipt=base_receipt)
+
+
 def _cmd_run(args) -> int:
     try:
         manifest = _manifest_for_path(args.path, args.set)
@@ -186,6 +263,9 @@ def _cmd_run(args) -> int:
             raise CliError(f"unknown relation {args.relation!r}")
         algorithms = [args.algorithm] if args.algorithm else list(manifest.algorithms or [None])
         report = run_manifest_validated(manifest, algorithms, relation_ids, args.seed)
+        muse_mode = _muse_mode(args)
+        if muse_mode != "inactive":
+            report = _expand_with_muse(report, manifest, algorithms, args, muse_mode)
     except ManifestError as exc:
         print(f"pqcheck: {exc}", file=sys.stderr)
         return EXIT_BAD
@@ -202,6 +282,10 @@ def _cmd_run(args) -> int:
         Path(args.html).write_text(report.to_html(), encoding="utf-8")
         # stderr: stdout must stay valid JSON when --json is also used
         print(f"HTML report written to {args.html}", file=sys.stderr)
+    if muse_mode == "inactive":
+        from pqcheck import ai
+        # stderr under --json: stdout must stay valid JSON
+        print(ai.inactive_footer(), file=sys.stderr if args.json else sys.stdout)
     return report.exit_code()
 
 
@@ -217,7 +301,7 @@ def _report_json(report: Report) -> dict:
             "class_refs": [asdict(r) for r in c.class_refs],
         }
         return data
-    return {"counts": report.counts(), "conclusive": report.is_conclusive_anywhere(), "claims": [claim_dict(c) for c in report.claims]}
+    return {"counts": report.counts(), "conclusive": report.is_conclusive_anywhere(), "ai_receipt": report.ai_receipt, "claims": [claim_dict(c) for c in report.claims]}
 
 
 def _safe_filename_part(text: str) -> str:
@@ -399,8 +483,24 @@ def _cmd_demo(args) -> int:
     except ClaimError as exc:
         print(f"  Claim refuses secret-shaped material: {exc}")
 
+    print()
+    print("=== Act 5: Neuro-Symbolic Muse AI Expansion & Ephemeral Sandbox Verification ===")
+    act5_receipt = None
+    if getattr(args, "no_muse", False):
+        from pqcheck import ai as _ai_mod
+        print("  " + _ai_mod.inactive_footer())
+    else:
+        from pqcheck.ai import run_act5
+        act5_lines, act5_failures, act5_receipt, ai_claims = run_act5()
+        for line in act5_lines:
+            print(line)
+        demo_claims.extend(ai_claims)
+        failures.extend(act5_failures)
+
     if getattr(args, "html", None):
-        Path(args.html).write_text(Report(tuple(demo_claims)).to_html(), encoding="utf-8")
+        Path(args.html).write_text(
+            Report(tuple(demo_claims), ai_receipt=act5_receipt).to_html(),
+            encoding="utf-8")
         print(f"HTML report written to {args.html}")
 
     print()
@@ -425,6 +525,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--json", action="store_true")
     run.add_argument("--html", help="also write a single-file HTML report to this path")
     run.add_argument("--reproducers")
+    run.add_argument("--muse", action="store_true",
+                     help="enable Muse AI expansion (live; needs MUSE_API_KEY/MUSE_API_BASE)")
+    run.add_argument("--muse-simulate", action="store_true",
+                     help="enable Muse AI expansion with the offline simulated client")
+    run.add_argument("--no-muse", action="store_true",
+                     help="disable Muse AI expansion even when MUSE_API_KEY is set")
     run.set_defaults(fn=_cmd_run)
     repro = sub.add_parser("reproduce")
     repro.add_argument("manifest")
@@ -438,8 +544,14 @@ def build_parser() -> argparse.ArgumentParser:
     ad = sub.add_parser("adapters"); ad.set_defaults(fn=_cmd_adapters)
     ui = sub.add_parser("ui"); ui.add_argument("folder", nargs="?")
     ui.set_defaults(fn=lambda a: __import__("pqcheck.tui", fromlist=["run"]).run(a.folder))
-    demo = sub.add_parser("demo", help="four-act judge showcase (fast, self-contained)")
+    demo = sub.add_parser("demo", help="five-act judge showcase (fast, self-contained)")
     demo.add_argument("--html", help="also write the Act 2/3 claims as a single-file HTML report")
+    demo.add_argument("--muse", action="store_true",
+                      help="enable Muse AI expansion in Act 5 (live when possible)")
+    demo.add_argument("--muse-simulate", action="store_true",
+                      help="Act 5 with the offline simulated client (default for Act 5)")
+    demo.add_argument("--no-muse", action="store_true",
+                      help="skip Act 5 (Muse AI expansion inactive)")
     demo.set_defaults(fn=_cmd_demo)
     web = sub.add_parser("web", help="local browser workbench (127.0.0.1 only)")
     web.add_argument("--port", type=int, default=8420)

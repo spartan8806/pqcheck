@@ -37,7 +37,7 @@ The 43 planted mutants are the canonical Appendix A keys:
 | Group | Count | Target |
 | --- | --- | --- |
 | `KEM_MUTANTS` | 10 | `ToyKem` |
-| `SIG_MUTANTS` | 15 | `ToySig` |
+| `SIG_MUTANTS` | 17 | `ToySig` |
 | `CODEC_MUTANTS` | 8 | `ToyStreamCodec` |
 | `LWE_MUTANTS` | 3 | `ToyLweKem` |
 | `PACKED_EK_MUTANTS` | 2 | `PackedEkKem` |
@@ -51,7 +51,7 @@ For every mutant, selftest requires both:
   mutant proves nothing and fails the suite.
 - **Recall**: at least one relation returns `DEFECT_FOUND`.
 
-And globally: every one of the 32 relations must fire on at least
+And globally: every one of the 34 relations must fire on at least
 one mutant (`relations with recall: 34/34`).
 
 ## Seed discipline

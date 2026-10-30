@@ -115,6 +115,24 @@ def report_to_html(report: Report) -> str:
     bucket("NO DEFECT FOUND (one-sided — establishes nothing)", witness, "witness")
     bucket("NO DEFECT FOUND", clean, "clean")
     bucket("NOT ANSWERABLE (out of scope for this tool)", scope, "scope")
+    if report.ai_receipt:
+        r = report.ai_receipt
+        created, wiped = r.get("ephemeral_temp_dirs_created"), r.get("ephemeral_temp_dirs_wiped")
+        wipe_line = ("100% wiped, 0 wild PoCs on disk" if created == wiped
+                     else "WIPE INCOMPLETE")
+        out.append(
+            '<div class="scope"><h2>Muse AI expansion</h2>'
+            f"<p>mode: {_esc(str(r.get('mode')))} "
+            f"(model {_esc(str(r.get('model')))})<br>"
+            f"core: {_esc(str(r.get('core_relations_ran')))} relations, "
+            f"{_esc(str(r.get('core_calls_executed')))} calls executed, "
+            f"estimated tokens saved: {_esc(str(r.get('estimated_tokens_saved')))}<br>"
+            f"candidates: proposed {_esc(str(r.get('candidates_proposed')))}, "
+            f"rejected by clean control "
+            f"{_esc(str(r.get('candidates_rejected_by_clean_control')))}, "
+            f"verified {_esc(str(r.get('candidates_verified')))}<br>"
+            f"ephemeral temp dirs: created {_esc(str(created))}, "
+            f"wiped {_esc(str(wiped))} ({wipe_line})</p></div>")
     out.append("</body></html>")
     text = "\n".join(out)
     kind = looks_like_secret_material(text)

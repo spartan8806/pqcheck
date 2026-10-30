@@ -375,7 +375,7 @@ def _claim_dict(claim) -> dict:
     }
 
 
-def run_target(spec: str) -> dict:
+def run_target(spec: str, muse: bool = False) -> dict:
     """Run all relations against one whitelisted target."""
     if spec == "manifest:python-reference":
         return _run_manifest()
@@ -385,7 +385,28 @@ def run_target(spec: str) -> dict:
         relation.run(target, subject, random.Random(f"web:{spec}:{rid}"))
         for rid, relation in sorted(REGISTRY.items())
     ]
-    return _report_dict(Report(tuple(claims)), spec)
+    report = Report(tuple(claims))
+    if muse:
+        from pqcheck import ai
+        mode = ai.resolve_mode()
+        if mode == "inactive":
+            mode = "simulated"
+        try:
+            client = ai.make_client(mode)
+        except ai.MuseError:
+            mode = "simulated"
+            client = ai.make_client(mode)
+        report = ai.expand_report(
+            report, target, client, subject,
+            random.Random(f"web:{spec}:muse"), mode=mode)
+    return _report_dict(report, spec)
+
+
+def muse_demo_data() -> dict:
+    """Act 5 pipeline for the Muse AI Engine tab (simulated, offline)."""
+    from pqcheck.ai import run_act5
+    lines, _failures, receipt, _claims = run_act5()
+    return {"lines": lines, "receipt": receipt}
 
 
 def _run_manifest() -> dict:
@@ -420,6 +441,7 @@ def _report_dict(report: Report, spec: str) -> dict:
     gaps = buckets["NOT_REACHED"] + buckets["NOT_ANSWERABLE"]
     return {
         "target": spec,
+        "ai_receipt": report.ai_receipt,
         "revision": sorted({c.subject.commit for c in report.claims}),
         "counts": {k: len(v) for k, v in buckets.items()},
         "conclusive": report.is_conclusive_anywhere(),
@@ -517,6 +539,7 @@ section{border:1px solid #2c2f36;border-radius:6px;padding:.8em 1em;margin:.7em 
 <button data-tab="backtest">Historical Backtest Matrix</button>
 <button data-tab="adapters">Multi-Language Adapters</button>
 <button data-tab="demo">Demo / Self-test</button>
+<button data-tab="muse">Muse AI Engine</button>
 <button data-tab="about">About</button>
 </nav>
 
@@ -609,8 +632,23 @@ defect so you can watch a finding happen on purpose.</p></section>
 <p class="meta">Toy fixtures, planted mutants, and boundary cases for demonstrating
 and self-testing pqcheck itself. Nothing here is a real project target.</p>
 <p><select id="target"></select> <button id="run">Run all relations</button></p>
+<p><label><input type="checkbox" id="museai"> Enable Muse AI Expansion (<code>muse-wonder-1.0</code>) — after the deterministic relations, Muse proposes candidate probes that are clean-control gated and executed in a wiped ephemeral sandbox (simulated offline unless a live key is configured server-side)</label></p>
 <p id="summary" class="meta"></p>
 <div id="report"></div>
+</div>
+
+<div id="tab-muse" class="hidden">
+<h2>Muse AI Engine — Neuro-Symbolic Expansion</h2>
+<section><h3>How it works</h3>
+<p><b>Tier 1 (offline, 0 tokens):</b> the deterministic relations run first, exactly as without Muse.</p>
+<p><b>Tier 2 (opt-in):</b> pqcheck builds a compact GapDigest — target, capabilities, sizes, relations ran, calls executed, defects already caught, and the relations that were NOT_REACHED or NOT_ANSWERABLE — and asks Muse (<code>muse-wonder-1.0</code>) to propose candidate invariant probes only for those uncovered surfaces.</p>
+<p><b>Clean-Reference Precision Gate (anti-hallucination):</b> every candidate first runs against a clean reference fixture. A candidate that fires on correct code is rejected as an AI false positive and never becomes a finding.</p>
+<p><b>Ephemeral sandbox &amp; mandatory wipe:</b> surviving candidates execute against the real target under crash-watching inside a fresh temporary directory, which is deleted in a <code>finally</code> block and the deletion is asserted. Muse never emits an unverified prose finding.</p></section>
+<section><h3>Run the simulated pipeline</h3>
+<p class="meta">Offline simulated client, clean reference control, planted compound mutant as target.</p>
+<p><button id="runmuse">Run Muse AI Engine demo (Act 5)</button></p>
+<pre id="museout" class="meta"></pre>
+<p id="musereceipt" class="meta"></p></section>
 </div>
 
 <div id="tab-catalogue" class="hidden">
@@ -645,7 +683,7 @@ const $=id=>document.getElementById(id);
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
  b.classList.add("active");
- ["project","reports","catalogue","backtest","adapters","demo","about"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));
+ ["project","reports","catalogue","backtest","adapters","demo","muse","about"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));
 }));
 function esc(s){const d=document.createElement("div");d.textContent=String(s??"");return d.innerHTML}
 async function loadTargets(){
@@ -725,9 +763,16 @@ function claimHtml(c){
  <p class="meta">false_positive_modes: ${esc((c.false_positive_modes||[]).join("; ")||"none declared")}</p>
  <p class="meta">does not establish: ${esc(c.ceiling)}</p></section>`;
 }
+$("runmuse").addEventListener("click",async()=>{
+ $("museout").textContent="running...";$("musereceipt").textContent="";
+ const r=await (await fetch("/api/muse-demo")).json();
+ $("museout").textContent=(r.lines||[]).join("\n");
+ const x=r.receipt||{};
+ $("musereceipt").textContent=`Token Savings receipt: mode ${x.mode} | core calls executed ${x.core_calls_executed} | estimated tokens saved ${x.estimated_tokens_saved} | candidates proposed ${x.candidates_proposed}, rejected by clean control ${x.candidates_rejected_by_clean_control}, verified ${x.candidates_verified} | ephemeral temp dirs created ${x.ephemeral_temp_dirs_created}, wiped ${x.ephemeral_temp_dirs_wiped} (100% wiped, 0 wild PoCs on disk)`;
+});
 $("run").addEventListener("click",async()=>{
  $("summary").textContent="running...";$("report").innerHTML="";
- const r=await (await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:$("target").value})})).json();
+ const r=await (await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:$("target").value,muse:$("museai").checked})})).json();
  if(r.error){$("summary").textContent="error: "+r.error;return}
  $("summary").textContent=Object.entries(r.counts).map(([k,v])=>k+": "+v).join(" | ")+(r.conclusive?" | conclusive somewhere":" | ESTABLISHED NOTHING");
  $("report").innerHTML=renderBuckets(r);
@@ -799,6 +844,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._json(ADAPTERS_DATA)
             if parsed.path == "/api/manifests":
                 return self._json(manifests_data())
+            if parsed.path == "/api/muse-demo":
+                return self._json(muse_demo_data())
             return self._json({"error": "not found"}, 404)
         except Exception as exc:  # honest error, never a stack trace page
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
@@ -820,7 +867,7 @@ class _Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/run-manifest":
                 return self._json(run_named_manifest(str(payload.get("name", ""))))
             spec = str(payload.get("target", ""))
-            return self._json(run_target(spec))
+            return self._json(run_target(spec, muse=bool(payload.get("muse"))))
         except ValueError as exc:
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:

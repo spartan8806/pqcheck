@@ -64,8 +64,8 @@ Relations declare `false_positive_modes` where a correct target can
 look defective. The load-bearing ones:
 
 - `kem-fo-liveness`: declared encoding slack is real malleability,
-  not a dead FO check. Evidence separates the two via per-byte
-  leaking bit-masks and must not claim the check is absent.
+  not a dead FO check. Evidence lists the witness byte offsets;
+  separating declared slack from a dead check is the precision suite's job (may_fire), not this relation's.
 - `kem-ek-modulus-canonical`: accepting a bumped `ek` as a *distinct*
   key is not a defect; only key-equivalence is reported.
 - `sig-unread-bits`: variable-length encodings with declared slack

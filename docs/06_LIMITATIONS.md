@@ -73,6 +73,16 @@ this document; please file it.
   shipped manifests against real builds (see
   [04_BACKTEST.md](04_BACKTEST.md) for what is demonstrated versus
   merely argued).
+- **Muse AI expansion is a proposer, not an oracle.** Candidate
+  probes are restricted to four built-in compound strategies,
+  are gated against a clean reference fixture, and execute only
+  inside a wiped ephemeral directory — but a candidate that
+  survives the gate is still just a probe result under its stated
+  ceiling, not a proof. The simulated client is deterministic and
+  offline; live mode depends on the configured Muse endpoint.
+  Muse claims carry an oracle label naming muse-wonder-1.0 as
+  execution-verified proposer; that is not an independent
+  implementation oracle.
 - **The C/Rust harnesses need a first compile** on a machine with a
   toolchain before their evidence counts; the Python-side protocol
   logic is unit-tested, the compiled artefacts are not verified in

@@ -31,7 +31,7 @@ clean claims without coverage, defects without reproducers, plain-string
 verdicts, moving version references, and secret-shaped report text are
 all refused at construction time.
 
-## 2. The four-act demo
+## 2. The five-act demo
 
 ```sh
 python -m pqcheck demo
@@ -41,7 +41,12 @@ Act 1 runs all 34 relations on clean and boundary targets (0 defects,
 honest declines). Act 2 catches four flagship mutants with printed
 witnesses. Act 3 shows a completely broken signer still producing a
 loud `DEFECT_FOUND`. Act 4 shows `Report.score()` and the secret-material
-floor refusing. It finishes in a few seconds and needs no target.
+floor refusing. Act 5 runs the Muse AI Expansion pipeline offline
+(simulated client): the core relations hand a GapDigest to Muse, one
+over-aggressive candidate is rejected by the Clean-Reference Precision
+Gate, and a valid compound candidate catches a planted defect inside a
+wiped ephemeral temp directory. `--no-muse` skips Act 5.
+It finishes in a few seconds and needs no target.
 
 ## 3. Point it at a real library
 
@@ -105,11 +110,20 @@ through this shim) stay `NOT_ANSWERABLE`/`NOT_REACHED` in the report.
 python -m pqcheck web --port 8420   # http://127.0.0.1:8420/ (loopback only)
 ```
 
-The Live Target Runner only runs **toy/reference fixtures**, and says
-so on every entry. The **Generated Reports** tab runs shipped
-manifests and shows the target, its pinned revision, findings,
-coverage gaps, and per-claim reproduction instructions. Real external
-targets appear only there (or via the CLI) — never disguised as toys.
+The **Project** tab (the default) is the real workflow: open a local
+project folder or manifest, check readiness, run through the same
+validated runner as the CLI, and export text/HTML/JSON reports plus
+reproduction instructions. Start with the planted-defect sample
+`examples/vulnerable-kem`. The **Shipped Manifest Reports** tab runs
+the manifests in [manifests/](../manifests/). The **Demo / Self-test**
+tab only runs **toy/reference fixtures**, and says
+so on every entry; its Muse AI Expansion checkbox runs the gated
+candidate pipeline after the relations. The **Muse AI Engine** tab
+explains the pipeline and runs the Act 5 simulated demo. Real external
+targets appear only through Project/Shipped Manifest Reports (or the
+CLI) — never disguised as toys. The **About** tab explains the
+verdicts and the safety posture.
+
 
 ## 7. Native checks and the isolated wheel
 

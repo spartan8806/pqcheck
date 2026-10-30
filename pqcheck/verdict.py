@@ -278,6 +278,10 @@ class Claim:
 @dataclass(frozen=True)
 class Report:
     claims: tuple[Claim, ...] = field(default_factory=tuple)
+    # Optional Muse AI expansion receipt (pqcheck/ai.py). Plain data
+    # only; never affects verdicts, counts, or the exit code beyond
+    # the claims it accompanies.
+    ai_receipt: dict | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.claims, Claim) or not isinstance(
@@ -411,6 +415,30 @@ class Report:
             lines.append(f"OUT OF SCOPE FOR THIS TOOL: {len(out_of_scope)}")
             for c in out_of_scope:
                 lines.extend(self._format_claim("-", c))
+        if self.ai_receipt:
+            r = self.ai_receipt
+            lines.append(
+                f"Muse AI expansion: {r.get('mode')} "
+                f"(model {r.get('model')})")
+            lines.append(
+                f"  core: {r.get('core_relations_ran')} relations, "
+                f"{r.get('core_calls_executed')} calls executed, "
+                f"estimated tokens saved: {r.get('estimated_tokens_saved')}")
+            lines.append(
+                f"  candidates: proposed {r.get('candidates_proposed')}, "
+                f"rejected by clean control "
+                f"{r.get('candidates_rejected_by_clean_control')}, "
+                f"verified {r.get('candidates_verified')}")
+            created = r.get("ephemeral_temp_dirs_created")
+            wiped = r.get("ephemeral_temp_dirs_wiped")
+            lines.append(
+                f"  ephemeral temp dirs: created {created}, wiped {wiped} "
+                "(100% wiped, 0 wild PoCs on disk)"
+                if created == wiped else
+                f"  ephemeral temp dirs: created {created}, wiped {wiped} "
+                "(WIPE INCOMPLETE)")
+            for note in r.get("notes") or []:
+                lines.append(f"  note: {note}")
         oracles = sorted(
             {c.method.oracle for c in self.claims if c.method.oracle}
         )

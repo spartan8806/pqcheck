@@ -68,20 +68,17 @@ adds three declared-slack KEMs (`WideByteSlackCtKem`,
 `InterleavedPadCtKem`, `AlignedCoeffCtKem`) whose slack is *part of
 the format*.
 
-`kem-fo-liveness` separates dead-check from slack via **per-byte
-leaking bit-masks**: for each ciphertext byte, which bit flips leak
-(return the honest secret) is measured per byte. The evidence rules
-are enforced by the precision suite's `must_not_say` phrases:
-
-- If exactly the declared slack bytes leak, the finding is reported
-  as real ciphertext malleability in those bytes — never as
-  "check is ABSENT".
-- The phrase "exclude the one benign explanation" and the claim that
-  the leaking mask "cannot span that many bytes" are forbidden
-  unless the measurement actually excludes slack: witness bytes
-  spanning body bytes that no declared slack covers.
-- If the mask differs arbitrarily between bytes with no slack
-  explanation, that is reported as measured, not theorised.
+`kem-fo-liveness` itself does something narrower than separating
+the two. For each ciphertext byte it flips bits 0, 1, and 7, and
+if a flipped ciphertext still decapsulates to the honest secret it
+records that byte offset. The evidence lists the witness byte
+offsets (`witness bytes: ...`); the relation does not classify
+per-byte bit-mask shapes and never claims the check is absent,
+only that these concrete flips were accepted. Separating
+dead-check from declared slack is the precision suite's job: its
+cases declare which relations `may_fire` on a declared slack shape
+and `must_not_say` phrases forbid calling declared slack a dead
+FO check in evidence text.
 
 The relation is `one_sided`: finding no witness establishes nothing
 (`NO_WITNESS_ESTABLISHES_NOTHING`), because a witness search over

@@ -42,8 +42,8 @@ python -m pqcheck.backtest.report    # historical defect-class accounting
 python -m pqcheck.probes             # standing regression probes (probes/)
 ```
 
-Shipped manifests for PQClean, liboqs, Noble, and a Falcon codec live in
-[manifests/](manifests/), with build scripts in [tools/](tools/).
+Shipped manifests (PQClean, liboqs, Noble, a Falcon codec, the enc_rust vulnerable/fixed pair, a Python reference, a C-library template) live in
+[manifests/](manifests/), with build scripts in [tools/](tools/). A reproducible Noble 0.6.1 mutation regression kit lives in [regressions/noble-mutations/](regressions/noble-mutations/).
 Constant-time and timing instruments (Valgrind secret-poisoning triage,
 Welch's t-test timing) are in [pqcheck/adapters/](pqcheck/adapters/) —
 they report leads and bounds, never certificates. See
@@ -71,11 +71,27 @@ rather than guessed.
 
 - [pqcheck/verdict.py](pqcheck/verdict.py) — verdict/claim/report engine
 - [pqcheck/target.py](pqcheck/target.py) — target seam and process-death attribution
-- [pqcheck/relations/](pqcheck/relations/) — the 32 relations and the runner
+- [pqcheck/relations/](pqcheck/relations/) — the 34 relations and the runner
+- [pqcheck/ai.py](pqcheck/ai.py) — Muse AI Expansion Engine (opt-in, clean-control gated)
 - [pqcheck/adapters/](pqcheck/adapters/) — C harness, Noble (JS), codec and hint bridges
 - [pqcheck/testing/](pqcheck/testing/) — reference toys, planted mutants, precision fixtures
 - [pqcheck/backtest/](pqcheck/backtest/) — historical defect-class corpus and accounting
 - [probes/](probes/) — standing regression probes (`verify_*.py`)
+
+## Muse AI expansion (opt-in)
+
+Without a key, pqcheck is the deterministic core above and prints
+`Muse AI expansion: INACTIVE (34 deterministic relations ran at 0 tokens; ...)`.
+With `--muse` (live, needs `MUSE_API_KEY`/`MUSE_API_BASE`), or
+`--muse-simulate` (offline simulated client), the core report is
+summarized into a compact GapDigest and Muse may propose candidate
+probes for uncovered surfaces. Muse never emits an unverified
+finding: every candidate runs in a wiped ephemeral temp directory,
+must not fire on a clean reference fixture (Clean-Reference
+Precision Gate), runs against the target under crash-watching, and
+must pass the secret-material floor. Results land in the report's
+`ai_receipt` (text, JSON, and HTML). The demo's Act 5
+(`python -m pqcheck demo`) shows the whole pipeline offline.
 
 ## Safety scope
 

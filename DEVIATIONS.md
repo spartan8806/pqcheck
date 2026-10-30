@@ -292,3 +292,19 @@ implementation differs from, or could not be verified against,
     capability only proves seed-deterministic key generation; Noble
     signing is hedged): signing determinism is observed by signing
     one message twice under one key and reported as observed.
+24. **Muse AI Expansion Engine (pqcheck/ai.py).** (a) The spec
+    text says "32 deterministic relations"; the registry has 34
+    since Set 3, so every count (footer, digest, receipt) derives
+    from REGISTRY and reads 34. (b) The secret-material floor the
+    spec calls _check_no_secret_material is implemented in ai.py
+    over looks_like_secret_material (Claim construction enforces
+    the same floor). (c) Two simulated-candidate strategies were
+    corrected after the Clean-Reference Precision Gate fired on
+    them during development: dk cross-region tampering now targets
+    early dk regions (a trailing rejection-seed flip legitimately
+    keeps the honest secret), and the multi-bit ciphertext probe
+    flips one bit in each of two spread bytes. (d) Muse claims
+    carry the spec's oracle label; report footers therefore list
+    muse-wonder-1.0 as the oracle for those claims, qualified by
+    the label's own execution-verified/clean-control-gated wording.
+    It is not an independent implementation oracle.

@@ -25,7 +25,7 @@ is a protocol failure. Run them all with `python -m pqcheck.probes`.
 | R14 | `ek` mutation touching the 32-byte `rho` tail instead of coefficients | [verify_probe_control.py](../probes/verify_probe_control.py) plus the Noble 0.6.1 regression fixture in [pqcheck/testing/fixtures.py](../pqcheck/testing/fixtures.py) |
 | R15 | One-sided FO result counted as clean in UI/report | [verify_ui_honesty.py](../probes/verify_ui_honesty.py), [verify_report_text.py](../probes/verify_report_text.py) |
 | R16 | Discovery executing a found binary, or guessing its version | [verify_discovery.py](../probes/verify_discovery.py) |
-| R17 | Unopenable real target producing a traceback instead of 32 honest declines | [verify_unopened_target_noble.py](../probes/verify_unopened_target_noble.py) |
+| R17 | Unopenable real target producing a traceback instead of 34 honest declines | [verify_unopened_target_noble.py](../probes/verify_unopened_target_noble.py) |
 | R18 | Variable-length signature forced through fixed-length relations | [verify_varlen.py](../probes/verify_varlen.py) |
 | R19 | Oracle use hidden from the report reader | [verify_oracle_disclosure.py](../probes/verify_oracle_disclosure.py) |
 | R20 | Premises smuggled as a bare string | [verify_premises.py](../probes/verify_premises.py) |
