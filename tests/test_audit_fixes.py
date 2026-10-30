@@ -86,11 +86,12 @@ int main(void) {
             exe = Path(td) / "asan_probe"
             build = subprocess.run(
                 [CC, "-fsanitize=address", "-g", "-o", str(exe), str(c)],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                timeout=120)
             if build.returncode != 0:
                 self.skipTest(f"ASan build unavailable: {build.stderr[:200]}")
             run = subprocess.run([str(exe)], capture_output=True, text=True,
-                                 timeout=60)
+                                 stdin=subprocess.DEVNULL, timeout=60)
             self.assertNotEqual(run.returncode, 0,
                                 "one-past read was NOT poisoned under ASan")
             self.assertIn("AddressSanitizer", run.stderr)
@@ -127,7 +128,8 @@ class JsonHtmlOutputTests(unittest.TestCase):
                 [sys.executable, "-m", "pqcheck", "run",
                  "manifests/python-reference.json", "--json",
                  "--html", str(html)],
-                capture_output=True, text=True, cwd=ROOT, timeout=300)
+                capture_output=True, text=True, stdin=_sp.DEVNULL,
+                cwd=ROOT, timeout=300)
             parsed = json.loads(proc.stdout)  # raises if polluted
             self.assertIn("counts", parsed)
             self.assertIn("HTML report written", proc.stderr)

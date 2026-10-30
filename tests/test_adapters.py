@@ -17,7 +17,7 @@ CC = shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")
 @unittest.skipUnless(CC, "no C compiler available")
 class CAdapterTests(unittest.TestCase):
     def _build(self, source, out):
-        subprocess.run([CC, "-O1", "-o", str(out), str(source)], check=True, capture_output=True, text=True, timeout=120)
+        subprocess.run([CC, "-O1", "-o", str(out), str(source)], check=True, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
 
     def test_kem_harness_round_trip(self):
         with tempfile.TemporaryDirectory() as td:

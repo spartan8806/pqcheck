@@ -166,7 +166,7 @@ class KitExecutionTests(unittest.TestCase):
     def test_missing_prereq_is_loud(self):
         proc = subprocess.run(
             [sys.executable, str(KIT_DIR / "run_kit.py"), "--src", str(ROOT / "does-not-exist")],
-            capture_output=True, text=True)
+            capture_output=True, text=True, stdin=subprocess.DEVNULL)
         self.assertEqual(proc.returncode, 2)
         self.assertIn("PREREQUISITE", proc.stderr)
 
@@ -176,7 +176,8 @@ class KitExecutionTests(unittest.TestCase):
              "--cases", "baseline", "explore-kem-ek-modulus-check-removed",
              "explore-kem-dk-hash-check-removed", "explore-sig-long-message-truncation",
              "control-sig-truncation-8192", "--seed", "1"],
-            capture_output=True, text=True, timeout=1200)
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            timeout=1200)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 

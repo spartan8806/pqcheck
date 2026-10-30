@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory() as td:
     scripts = list(outdir.glob("*.py"))
     check(len(scripts) == 1, "no reproducer script generated")
     proc = subprocess.run([sys.executable, str(scripts[0])], capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL,
                           cwd=str(ROOT), timeout=120)
     check(proc.returncode in (0, 1, 2), f"reproducer exited {proc.returncode}: {proc.stderr[-300:]}")
     check("core-kem-round-trip" in proc.stdout or "NO DEFECT" in proc.stdout or "DEFECT" in proc.stdout,

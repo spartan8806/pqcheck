@@ -64,6 +64,7 @@ def run_probes(directory=None, timeout=300):
         try:
             proc = subprocess.run(
                 [sys.executable, str(script)], capture_output=True, text=True,
+                stdin=subprocess.DEVNULL,
                 timeout=timeout, cwd=str(root.parent),
             )
             code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")

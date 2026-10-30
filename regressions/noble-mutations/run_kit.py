@@ -103,6 +103,7 @@ def run_pqcheck(manifest: Path, seed: int, repro_dir: Path | None = None) -> tup
     if repro_dir is not None:
         argv += ["--reproducers", str(repro_dir)]
     proc = subprocess.run(argv, capture_output=True, text=True, cwd=REPO, timeout=1200,
+                          stdin=subprocess.DEVNULL,
                           env={**os.environ, "PYTHONUTF8": "1"})
     try:
         report = json.loads(proc.stdout)
@@ -146,6 +147,7 @@ def replay_reproducers(repro_dir: Path, defects: set[str],
     for script in scripts:
         rid = next((r for r in defects if script.name.startswith(f"reproduce_{r}_")), None)
         proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL,
                               cwd=REPO, timeout=1200, env={**os.environ, "PYTHONUTF8": "1"})
         (repro_dir / f"{script.name}.stdout.txt").write_text(proc.stdout, encoding="utf-8")
         (repro_dir / f"{script.name}.stderr.txt").write_text(proc.stderr, encoding="utf-8")

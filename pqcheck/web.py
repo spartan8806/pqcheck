@@ -549,7 +549,7 @@ section{border:1px solid #2c2f36;border-radius:6px;padding:.8em 1em;margin:.7em 
 2. We identify the target and check readiness before anything runs.
 3. Checks run through the same validated runner as the CLI.
 Recognizing source files does not mean we can test them.</p>
-<p><input id="projpath" type="text" size="72" placeholder="C:\path\to\project  or  C:\path\to\manifest.json">
+<p><input id="projpath" type="text" size="72" placeholder="C:\\path\\to\\project  or  C:\\path\\to\\manifest.json">
 <button id="inspect">Open &amp; check readiness</button></p>
 <p class="meta">New here? Open the sample project <code>examples/vulnerable-kem</code> —
 it has a planted defect, so you can watch a finding happen on purpose.</p>
