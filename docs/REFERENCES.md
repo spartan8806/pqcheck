@@ -18,7 +18,7 @@
   the backtest work queue.
 - **Falcon v1.2** — Fouque et al., "Falcon: Fast-Fourier Lattice-based
   Compact Signatures over NTRU", specification v1.2. Source of the
-  sign-magnitude compressed signature encoding whose signed-zero and
+  sign bit, 7 low bits, then unary high bits ending in 1 signature encoding whose signed-zero and
   padding canonicality the `sig-encoding-*` relations check.
 
 ## Research

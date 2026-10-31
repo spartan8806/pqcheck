@@ -34,30 +34,20 @@ secret directly. The witness coordinates in the demo
 happens. The defect is not "malleability" in the abstract; it is a
 dead check with named witnesses.
 
-## Why Module-LWE KEMs produce witnesses even when correct
+## Why a correct ML-KEM produces no witnesses
 
-ML-KEM is not in the ElGamal situation. Decryption recovers a message
-by decompressing and rounding noisy LWE samples. Compression maps
-many coefficient values onto the same output, so the decryption
-fiber over a message is **large**: many distinct ciphertext byte
-strings decrypt to the same message. A single-bit flip in a
-compressed coefficient frequently rounds to the same value —
-empirically, a large fraction (design analyses put it around 69% for
-typical ML-KEM parameters) of same-message single-bit witnesses
-exist at the *decryption* layer.
+ML-KEM decryption decompresses and rounds noisy LWE samples, so many
+coefficient values decrypt to the same message: the decryption fiber
+is large. But FO decapsulation re-encrypts and compares the *entire*
+ciphertext (c == c'), and ByteEncode_du/dv packs every bit with no
+slack. Any flipped bit makes c differ from c', so a correct ML-KEM
+implicitly rejects every corrupted ciphertext and yields no
+witnesses, even when the flip decrypts to the same message.
 
-So on a real Module-LWE KEM, "a corrupted ciphertext returned the
-honest secret" has **two** possible explanations:
-
-1. the FO re-encryption check is dead (a defect), or
-2. the flip landed in compression/rounding slack, decryption
-   recovered the same message, re-encryption produced the *original*
-   ciphertext encoding, and the check legitimately passed — while
-   the submitted bytes differ from the re-encrypted bytes.
-
-A naive liveness relation cannot distinguish these and would fire on
-correct ML-KEM implementations. That is a false positive worse than
-a miss.
+A witness therefore means either the comparison is dead or partial
+(a defect), or the format declares encoding slack: bits that are not
+covered by the comparison. The precision suite's declared-slack KEMs
+model that second case.
 
 ## How the relation separates the two
 
